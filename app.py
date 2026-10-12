@@ -1,960 +1,489 @@
-
-import base64
-import io
 import os
+import io
 import re
 import subprocess
 from datetime import datetime
 
 from flask import (
-    Flask, request, render_template_string, send_file,
-    session, redirect, url_for
+    Flask, request, render_template_string,
+    send_file, session, redirect, url_for
 )
+from werkzeug.utils import secure_filename
 from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfgen import canvas
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.environ.get(
-    "SECRET_KEY", "ubah-kepada-kunci-rahsia-anda"
+    "SECRET_KEY", "ai-smart-technician-secret-key"
 )
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
 
-
-# ---------------------------------
-# REKA BENTUK ASAL MAIN.PY
-# ---------------------------------
+BG = "#EAF2F8"
+BLUE = "#1F4E79"
+RED = "#C0392B"
+GREEN = "#148F77"
+PURPLE = "#7D3C98"
+LIGHT_BLUE = "#2874A6"
 
 STYLE = """
-* {
-    box-sizing: border-box;
-}
-
+<style>
+* { box-sizing: border-box; }
 body {
     margin: 0;
+    padding: 25px 15px;
+    background: #EAF2F8;
     font-family: Arial, sans-serif;
-    background: #EAF2F8;
-    color: #222222;
+    color: #263746;
 }
-
-header {
-    background: #EAF2F8;
-    color: #1F4E79;
-    text-align: center;
-    padding: 28px 12px 8px;
-}
-
-header h1 {
-    margin: 0;
-    font-size: clamp(25px, 4vw, 34px);
-    font-weight: bold;
-}
-
-header p {
-    margin: 16px 0;
-    color: #333333;
-    font-size: 15px;
-}
-
-main {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 12px 16px 30px;
-}
-
-.card {
-    background: transparent;
-    padding: 16px 12px;
-    border-radius: 0;
-    box-shadow: none;
-    margin-bottom: 18px;
-}
-
-h2 {
-    color: #1F4E79;
-    margin-top: 0;
-    text-align: center;
-}
-
-label {
-    display: block;
-    font-weight: bold;
-    margin: 14px 0 7px;
-}
-
-input[type=text],
-textarea,
-input[type=file] {
-    width: 100%;
-    padding: 11px;
-    border: 1px solid #B9C7D3;
-    border-radius: 7px;
-    font-size: 16px;
+.container {
+    max-width: 850px;
+    margin: 20px auto;
+    padding: 30px;
     background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px #00000015;
 }
-
-textarea {
-    min-height: 120px;
-    resize: vertical;
+h1 {
+    color: #1F4E79;
+    text-align: center;
+    font-size: 30px;
+    margin-bottom: 8px;
 }
-
-.btn {
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    border: 0;
-    border-radius: 5px;
-    background: #1F4E79;
+h2 { color: #1F4E79; }
+.subtitle { text-align: center; margin-bottom: 25px; }
+.version { color: #C0392B; font-weight: bold; text-align: center; }
+.academy { color: #1F4E79; font-weight: bold; text-align: center; }
+.menu-title { color: #555; text-align: center; font-weight: bold; }
+.description { text-align: center; margin: 20px 0; }
+.button {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    margin: 12px 0;
+    border: none;
+    border-radius: 7px;
     color: white;
-    padding: 13px 16px;
-    font-weight: bold;
-    font-size: 15px;
     text-decoration: none;
-    cursor: pointer;
-    margin: 5px 0;
-    min-height: 48px;
-}
-
-.btn:hover {
-    filter: brightness(1.1);
-}
-
-.blue {
-    background: #2874A6;
-}
-
-.green {
-    background: #148F77;
-}
-
-.purple {
-    background: #7D3C98;
-}
-
-.red {
-    background: #C0392B;
-}
-
-.home-buttons {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-}
-
-.home-buttons .btn {
-    width: 240px;
-    min-height: 58px;
-}
-
-.academy {
-    color: blue;
-    font-size: 18px;
-    font-weight: bold;
-    text-align: center;
-    margin: 8px 0 16px;
-}
-
-.version {
-    color: red;
-    font-size: 14px;
-    font-weight: bold;
-    text-align: center;
-    margin: 8px 0;
-}
-
-.system-description {
     text-align: center;
     font-size: 16px;
     font-weight: bold;
-    margin: 12px 0 20px;
+    cursor: pointer;
 }
-
-.menu-buttons {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
+.blue { background: #1F4E79; }
+.lightblue { background: #2874A6; }
+.green { background: #148F77; }
+.purple { background: #7D3C98; }
+.red { background: #C0392B; }
+.grey { background: #626567; }
+label { display: block; margin-top: 16px; font-weight: bold; }
+input[type=text], input[type=file], textarea {
+    width: 100%;
+    padding: 12px;
+    margin-top: 7px;
+    border: 1px solid #ccd5dd;
+    border-radius: 6px;
+    font-family: Arial, sans-serif;
+    font-size: 15px;
 }
-
-.menu-buttons .btn {
-    width: min(100%, 360px);
-    min-height: 62px;
-    font-size: 14px;
-}
-
+textarea { min-height: 110px; resize: vertical; }
 .result {
+    margin-top: 20px;
+    padding: 16px;
+    background: #F2F8FC;
+    border-left: 5px solid #1F4E79;
+    border-radius: 5px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    background: #F4F7FA;
-    padding: 14px;
-    border-left: 4px solid #2874A6;
-    border-radius: 5px;
-    margin-top: 12px;
 }
-
-.muted {
-    color: #555555;
-    font-size: 14px;
-}
-
-img.preview {
-    max-width: 100%;
-    max-height: 340px;
-    display: block;
-    margin: 12px auto;
-    border-radius: 8px;
-}
-
-.page-buttons {
-    margin-top: 20px;
-    text-align: center;
-}
-
-footer {
-    text-align: center;
-    color: #555555;
-    padding: 15px;
-    font-size: 13px;
-}
-
-@media (max-width: 600px) {
-    main {
-        padding-left: 12px;
-        padding-right: 12px;
-    }
-
-    .home-buttons .btn {
-        width: 85%;
-    }
-
-    .menu-buttons .btn {
-        width: 100%;
-    }
-}
+img.preview { display: block; max-width: 100%; max-height: 350px;
+    margin: 20px auto; border-radius: 8px; }
+.footer { text-align: center; color: #667; font-size: 13px; margin-top: 25px; }
+</style>
 """
 
-SHELL = """<!doctype html>
-<html lang="ms">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }} - AI Smart Technician</title>
-<style>""" + STYLE + """</style>
-</head>
-<body>
-<header>
-    <h1>AI SMART TECHNICIAN</h1>
-    <p>Sistem Bantuan Diagnosis Masalah Komputer</p>
-</header>
-<main>{{ body|safe }}</main>
-<footer>MESSI SKILLS ACADEMY · Versi 1.0</footer>
-</body>
-</html>"""
-
-
-def render_page(title, body):
-    return render_template_string(
-        SHELL, title=title, body=body
-    )
-
-
-# ---------------------------------
-# SIMPAN DAN BACA DIAGNOSIS TERAKHIR
-# ---------------------------------
+def page(content, title="AI SMART TECHNICIAN"):
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="ms">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>{{ title }}</title>
+      """ + STYLE + """
+    </head>
+    <body>
+      {{ content|safe }}
+      <div class="footer">AI SMART TECHNICIAN | MESSI SKILLS ACADEMY</div>
+    </body>
+    </html>
+    """, content=content, title=title)
 
 def save_report(problem, diagnosis, advice):
-    session["report_problem"] = problem[:500]
-    session["report_diagnosis"] = diagnosis[:2500]
-    session["report_advice"] = advice[:1500]
-
-
-def get_report():
-    return {
-        "problem": session.get("report_problem", ""),
-        "diagnosis": session.get("report_diagnosis", ""),
-        "advice": session.get("report_advice", ""),
+    session["report"] = {
+        "problem": problem,
+        "diagnosis": diagnosis,
+        "advice": advice
     }
 
+def diagnosis_computer(problem):
+    text = problem.lower()
 
-# ---------------------------------
-# SKRIN PERMULAAN
-# ---------------------------------
+    if any(word in text for word in ["tak hidup", "tidak hidup", "tak boleh hidup", "tidak boleh hidup"]):
+        diagnosis = "Komputer tidak dapat dihidupkan."
+        advice = "Periksa kabel kuasa, soket elektrik, pengecas dan bekalan kuasa komputer."
+
+    elif any(word in text for word in ["slow", "lambat", "perlahan", "lembap"]):
+        diagnosis = "Komputer berkemungkinan mengalami prestasi perlahan."
+        advice = "Semak penggunaan CPU dan RAM, tutup aplikasi tidak diperlukan dan periksa ruang storan."
+
+    elif any(word in text for word in ["monitor", "paparan", "display", "skrin"]):
+        diagnosis = "Masalah paparan mungkin berpunca daripada monitor, kabel atau grafik."
+        advice = "Periksa kabel HDMI/VGA, sambungan monitor dan pastikan monitor menerima kuasa."
+
+    elif any(word in text for word in ["internet", "wifi", "wi-fi", "network", "rangkaian"]):
+        diagnosis = "Masalah mungkin berkaitan sambungan rangkaian."
+        advice = "Periksa Wi-Fi atau kabel LAN, status adapter rangkaian dan sambungan router."
+
+    elif any(word in text for word in ["panas", "overheat", "habuk", "berhabuk"]):
+        diagnosis = "Komputer mungkin mengalami masalah suhu tinggi atau pengumpulan habuk."
+        advice = "Periksa kipas dan pengudaraan. Matikan komputer sebelum membersihkan habuk."
+
+    elif "ram" in text:
+        diagnosis = "Masalah mungkin berkaitan RAM atau sambungan memori."
+        advice = "Matikan komputer dan minta juruteknik memeriksa pemasangan RAM dengan selamat."
+
+    else:
+        diagnosis = "Masalah belum dapat dikenal pasti berdasarkan maklumat yang diberikan."
+        advice = "Semak mesej ralat, sambungan perkakasan dan simptom komputer dengan lebih terperinci."
+
+    return diagnosis, advice
 
 @app.route("/")
 def home():
-    body = """
-    <section class="card">
-        <h2 style="font-size:30px;">AI SMART TECHNICIAN</h2>
-        <p style="text-align:center;">
-            Sistem Bantuan Diagnosis Masalah Komputer
-        </p>
-
-        <div class="home-buttons">
-            <a class="btn" href="{{ url_for('menu') }}">
-                MULA SISTEM
-            </a>
-
-            <a class="btn red" href="{{ url_for('keluar') }}">
-                KELUAR
-            </a>
-        </div>
-    </section>
+    content = """
+    <div class="container" style="max-width:750px; padding-top:65px; padding-bottom:55px;">
+      <h1 style="font-size:34px;">AI SMART TECHNICIAN</h1>
+      <p class="subtitle">Sistem Bantuan Diagnosis Masalah Komputer</p>
+      <a class="button blue" href="/menu">MULA SISTEM</a>
+      <a class="button red" href="/keluar">KELUAR</a>
+    </div>
     """
-    return render_page(
-        "Laman Utama", render_template_string(body)
-    )
-
-
-# ---------------------------------
-# MENU UTAMA - MENGIKUT MAIN.PY
-# ---------------------------------
+    return page(content)
 
 @app.route("/menu")
 def menu():
-    body = """
-    <section class="card" style="text-align:center;">
+    content = """
+    <div class="container">
+      <h1>AI SMART TECHNICIAN</h1>
+      <p class="version">VERSION 1.0</p>
+      <p class="academy">MESSI SKILLS ACADEMY</p>
+      <p class="menu-title">MENU UTAMA</p>
+      <p class="description">SISTEM BANTUAN DIAGNOSIS MASALAH KOMPUTER</p>
 
-        <h2 style="font-size:28px;">
-            AI SMART TECHNICIAN
-        </h2>
-
-        <div class="version">VERSION 1.0</div>
-
-        <div class="academy">MESSI SKILLS ACADEMY</div>
-
-        <h3 style="color:#555555;font-size:15px;">
-            MENU UTAMA
-        </h3>
-
-        <div class="system-description">
-            SISTEM BANTUAN DIAGNOSIS MASALAH KOMPUTER
-        </div>
-
-        <div class="menu-buttons">
-            <a class="btn" href="{{ url_for('diagnosis_komputer') }}">
-                DIAGNOSIS KOMPUTER
-            </a>
-
-            <a class="btn blue" href="{{ url_for('diagnosis_network') }}">
-                DIAGNOSIS NETWORK
-            </a>
-
-            <a class="btn green" href="{{ url_for('upload_gambar') }}">
-                UPLOAD GAMBAR
-            </a>
-
-            <a class="btn purple" href="{{ url_for('technician_report') }}">
-                TECHNICIAN REPORT
-            </a>
-
-            <a class="btn red" href="{{ url_for('keluar') }}">
-                KELUAR
-            </a>
-        </div>
-
-    </section>
+      <a class="button blue" href="/diagnosis">DIAGNOSIS KOMPUTER</a>
+      <a class="button lightblue" href="/network">DIAGNOSIS NETWORK</a>
+      <a class="button green" href="/upload">UPLOAD GAMBAR</a>
+      <a class="button purple" href="/report">TECHNICIAN REPORT</a>
+      <a class="button red" href="/keluar">KELUAR</a>
+      <a class="button grey" href="/">KEMBALI KE HALAMAN UTAMA</a>
+    </div>
     """
-    return render_page(
-        "Menu Utama", render_template_string(body)
-    )
-
-
-# ---------------------------------
-# DIAGNOSIS KOMPUTER
-# ---------------------------------
+    return page(content)
 
 @app.route("/diagnosis", methods=["GET", "POST"])
-def diagnosis_komputer():
+def diagnosis():
     result = ""
-    masalah = ""
-
     if request.method == "POST":
-        masalah = request.form.get("masalah", "").strip()
-        p = masalah.lower()
-        diagnosis = ""
-        advice = ""
+        problem = request.form.get("problem", "").strip()
+        if problem:
+            diag, advice = diagnosis_computer(problem)
+            save_report(problem, diag, advice)
+            result = f"""
+            <div class="result">
+            <b>MASALAH:</b>
+            {problem}
 
-        if not masalah:
-            result = "Sila masukkan masalah komputer."
+            <b>DIAGNOSIS:</b>
+            {diag}
 
-        elif "tak hidup" in p or "tidak hidup" in p:
-            diagnosis = (
-                "1. Kabel kuasa mungkin tidak disambungkan dengan baik.\n"
-                "2. Power supply (PSU) mungkin bermasalah.\n"
-                "3. Bekalan elektrik mungkin tidak stabil."
-            )
-            advice = (
-                "Periksa kabel kuasa dan bekalan elektrik. "
-                "Jika masih tidak hidup, minta teknisyen memeriksa PSU."
-            )
-
-        elif any(w in p for w in (
-            "slow", "lambat", "perlahan", "lembap"
-        )):
-            diagnosis = (
-                "1. RAM mungkin tidak mencukupi.\n"
-                "2. Terlalu banyak program mungkin berjalan.\n"
-                "3. Ruang storan mungkin hampir penuh."
-            )
-            advice = (
-                "Tutup program yang tidak diperlukan dan periksa "
-                "penggunaan RAM serta ruang storan."
-            )
-
-        elif "monitor" in p or "tiada paparan" in p:
-            diagnosis = (
-                "1. Kabel HDMI/VGA/DisplayPort mungkin longgar.\n"
-                "2. Monitor mungkin tidak menerima isyarat.\n"
-                "3. RAM atau kad grafik mungkin bermasalah."
-            )
-            advice = (
-                "Periksa kabel paparan dan pastikan monitor dihidupkan. "
-                "Jika masih tiada paparan, dapatkan pemeriksaan teknisyen."
-            )
-
-        elif any(w in p for w in (
-            "internet", "wifi", "wi-fi", "rangkaian"
-        )):
-            diagnosis = (
-                "1. Sambungan Wi-Fi mungkin bermasalah.\n"
-                "2. Kabel rangkaian mungkin bermasalah.\n"
-                "3. Router atau switch mungkin bermasalah."
-            )
-            advice = (
-                "Periksa sambungan rangkaian, kabel LAN atau Wi-Fi, "
-                "dan status router."
-            )
-
-        elif any(w in p for w in (
-            "panas", "overheat", "berhabuk", "habuk"
-        )):
-            diagnosis = (
-                "1. Kipas komputer mungkin tidak berfungsi dengan baik.\n"
-                "2. Habuk mungkin terkumpul pada sistem penyejukan.\n"
-                "3. Aliran udara dalam casing mungkin terhalang."
-            )
-            advice = (
-                "Matikan komputer sebelum pemeriksaan fizikal. "
-                "Bersihkan habuk dengan kaedah selamat dan periksa kipas."
-            )
-
-        elif "ram" in p:
-            diagnosis = (
-                "1. RAM mungkin tidak dipasang dengan baik.\n"
-                "2. RAM atau slot mungkin kotor.\n"
-                "3. RAM mungkin mengalami kerosakan."
-            )
-            advice = (
-                "Matikan komputer dan putuskan kuasa sebelum memeriksa RAM. "
-                "Jika berterusan, uji dengan RAM yang diketahui baik."
-            )
-
+            <b>CADANGAN:</b>
+            {advice}
+            </div>
+            """
         else:
-            diagnosis = (
-                "Masalah belum dapat dikenal pasti daripada kata kunci "
-                "yang dimasukkan."
-            )
-            advice = (
-                "Terangkan simptom dengan lebih jelas dan lakukan "
-                "pemeriksaan lanjutan. Ini panduan awal, bukan diagnosis "
-                "muktamad."
-            )
+            result = '<div class="result">Sila masukkan masalah komputer terlebih dahulu.</div>'
 
-        if diagnosis:
-            save_report(masalah, diagnosis, advice)
-            result = (
-                "KEMUNGKINAN PUNCA:\n" + diagnosis
-                + "\n\nCADANGAN TEKNISYEN:\n" + advice
-            )
-
-    body = """
-    <section class="card">
-        <h2>DIAGNOSIS KOMPUTER</h2>
-
-        <form method="post">
-            <label for="masalah">
-                Masukkan masalah komputer yang dialami:
-            </label>
-
-            <input id="masalah" name="masalah" type="text"
-                value="{{ masalah }}"
-                placeholder="Contoh: komputer tidak hidup" required>
-
-            <button class="btn" type="submit">
-                ANALISIS MASALAH
-            </button>
-        </form>
-
-        {% if result %}
-            <h3>Hasil Analisis</h3>
-            <div class="result">{{ result }}</div>
-        {% endif %}
-
-        <div class="page-buttons">
-            <a class="btn red" href="{{ url_for('menu') }}">
-                KEMBALI KE MENU
-            </a>
-        </div>
-    </section>
+    content = """
+    <div class="container">
+      <h1>DIAGNOSIS KOMPUTER</h1>
+      <form method="post">
+        <label>Nyatakan masalah komputer:</label>
+        <textarea name="problem" required placeholder="Contoh: Komputer lambat dan selalu panas"></textarea>
+        <button class="button blue" type="submit">ANALISIS MASALAH</button>
+      </form>
+      """ + result + """
+      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+    </div>
     """
-
-    return render_page(
-        "Diagnosis Komputer",
-        render_template_string(
-            body, result=result, masalah=masalah
-        )
-    )
-
-
-# ---------------------------------
-# DIAGNOSIS NETWORK / PING
-# ---------------------------------
+    return page(content)
 
 @app.route("/network", methods=["GET", "POST"])
-def diagnosis_network():
+def network():
     result = ""
-    alamat = ""
-
     if request.method == "POST":
-        alamat = request.form.get("alamat", "").strip()
+        host = request.form.get("host", "").strip()
 
-        if (
-            not alamat
-            or len(alamat) > 253
-            or not re.fullmatch(
-                r"[A-Za-z0-9][A-Za-z0-9.:-]*", alamat
-            )
-        ):
-            result = "Sila masukkan alamat IP atau nama host yang sah."
-
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", host):
+            result = '<div class="result">Masukkan alamat IP atau nama hos yang sah.</div>'
         else:
             try:
-                proc = subprocess.run(
-                    ["ping", "-c", "4", "-W", "3", alamat],
+                completed = subprocess.run(
+                    ["ping", "-c", "4", "-W", "3", host],
                     capture_output=True,
                     text=True,
-                    timeout=16,
-                    check=False
+                    timeout=20
                 )
-
-                output = (
-                    proc.stdout or proc.stderr
-                    or "Tiada output daripada arahan ping."
+                output = completed.stdout or completed.stderr or "Tiada output diterima."
+                diagnosis_text = (
+                    "Ping menerima respons daripada hos."
+                    if completed.returncode == 0
+                    else "Ping gagal atau hos tidak memberikan respons."
                 )
-
-                status = (
-                    "STATUS: SAMBUNGAN BERJAYA"
-                    if proc.returncode == 0
-                    else "STATUS: SAMBUNGAN GAGAL"
-                )
-
-                result = status + "\n\n" + output[-1200:]
-
                 save_report(
-                    "Ujian ping ke " + alamat,
-                    result,
-                    "Jika sambungan gagal, periksa internet, kabel LAN "
-                    "atau Wi-Fi, router dan alamat sasaran."
+                    "Ujian ping ke " + host,
+                    diagnosis_text,
+                    "Semak alamat IP, kabel rangkaian, Wi-Fi, gateway dan firewall jika ping gagal."
                 )
-
-            except subprocess.TimeoutExpired:
-                result = (
-                    "Ujian ping mengambil masa terlalu lama "
-                    "dan telah dihentikan."
-                )
-
+                result = '<div class="result"><b>KEPUTUSAN PING</b><br>' + \
+                    "<br>".join(
+                        line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        for line in output.splitlines()
+                    ) + '</div>'
             except Exception as exc:
-                result = "Ujian ping gagal dijalankan: " + str(exc)
+                result = '<div class="result">Ujian ping tidak dapat dijalankan: ' + \
+                    str(exc).replace("<", "&lt;").replace(">", "&gt;") + '</div>'
 
-    body = """
-    <section class="card">
-        <h2>DIAGNOSIS NETWORK</h2>
-
-        <form method="post">
-            <label for="alamat">
-                Masukkan alamat IP atau nama host:
-            </label>
-
-            <input id="alamat" name="alamat" type="text"
-                value="{{ alamat }}"
-                placeholder="Contoh: 8.8.8.8 atau google.com" required>
-
-            <button class="btn blue" type="submit">
-                UJIAN PING
-            </button>
-        </form>
-
-        {% if result %}
-            <h3>Keputusan Ping</h3>
-            <div class="result">{{ result }}</div>
-        {% endif %}
-
-        <p class="muted">
-            Sesetengah pelayan menyekat ping. Kegagalan ping tidak
-            semestinya bermaksud laman web tidak boleh dibuka.
-        </p>
-
-        <div class="page-buttons">
-            <a class="btn red" href="{{ url_for('menu') }}">
-                KEMBALI KE MENU
-            </a>
-        </div>
-    </section>
+    content = """
+    <div class="container">
+      <h1>DIAGNOSIS NETWORK</h1>
+      <p>Masukkan alamat IP atau nama hos untuk menjalankan ujian ping.</p>
+      <form method="post">
+        <label>Alamat IP / Nama Hos:</label>
+        <input type="text" name="host" required placeholder="Contoh: 8.8.8.8">
+        <button class="button lightblue" type="submit">MULA UJIAN PING</button>
+      </form>
+      """ + result + """
+      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+    </div>
     """
-
-    return render_page(
-        "Diagnosis Network",
-        render_template_string(
-            body, result=result, alamat=alamat
-        )
-    )
-
-
-# ---------------------------------
-# UPLOAD GAMBAR
-# ---------------------------------
+    return page(content)
 
 @app.route("/upload", methods=["GET", "POST"])
-def upload_gambar():
+def upload():
     result = ""
     preview = ""
 
     if request.method == "POST":
-        file = request.files.get("gambar")
+        file = request.files.get("image")
 
         if not file or not file.filename:
-            result = "Sila pilih gambar terlebih dahulu."
-
+            result = '<div class="result">Sila pilih gambar terlebih dahulu.</div>'
         else:
             filename = secure_filename(file.filename)
-            ext = (
-                filename.rsplit(".", 1)[-1].lower()
-                if "." in filename else ""
-            )
+            extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
-            if ext not in ALLOWED_EXTENSIONS:
-                result = "Format gambar mesti JPG, JPEG atau PNG."
-
+            if extension not in ALLOWED_EXTENSIONS:
+                result = '<div class="result">Format gambar yang dibenarkan ialah JPG, JPEG dan PNG.</div>'
             else:
                 try:
-                    image = Image.open(file.stream)
-                    image.verify()
+                    image_bytes = file.read()
+                    img = Image.open(io.BytesIO(image_bytes))
+                    img.verify()
 
-                    file.stream.seek(0)
-                    image = Image.open(file.stream)
-                    image.thumbnail((700, 450))
-
-                    if image.mode not in ("RGB", "L"):
-                        image = image.convert("RGB")
-
-                    fmt = "PNG" if ext == "png" else "JPEG"
-                    out = io.BytesIO()
-                    image.save(out, format=fmt)
-
-                    preview = (
-                        "data:image/"
-                        + ("png" if fmt == "PNG" else "jpeg")
-                        + ";base64,"
-                        + base64.b64encode(
-                            out.getvalue()
-                        ).decode("ascii")
-                    )
+                    encoded = __import__("base64").b64encode(image_bytes).decode("ascii")
+                    mime = "image/png" if extension == "png" else "image/jpeg"
+                    preview = f'<img class="preview" src="data:{mime};base64,{encoded}" alt="Gambar yang dimuat naik">'
 
                     name = filename.lower()
-
-                    if any(w in name for w in (
-                        "berhabuk", "habuk", "overheat", "panas"
-                    )):
-                        problem = (
-                            "Kemungkinan masalah penyejukan "
-                            "atau habuk pada komputer."
-                        )
-                        advice = (
-                            "1. Bersihkan habuk pada kipas dan heatsink.\n"
-                            "2. Pastikan kipas berfungsi dengan baik.\n"
-                            "3. Pastikan aliran udara tidak terhalang."
-                        )
-
-                    elif any(w in name for w in (
-                        "monitor", "display", "paparan"
-                    )):
-                        problem = (
-                            "Kemungkinan masalah paparan monitor "
-                            "atau sambungan kabel."
-                        )
-                        advice = (
-                            "1. Periksa kabel HDMI/VGA/DisplayPort.\n"
-                            "2. Pastikan monitor dihidupkan.\n"
-                            "3. Periksa RAM dan kad grafik jika perlu."
-                        )
-
+                    if any(word in name for word in ["habuk", "dust", "panas", "overheat"]):
+                        problem = "Gambar berkaitan habuk atau suhu komputer."
+                        diag = "Kemungkinan pengumpulan habuk atau masalah pengudaraan."
+                        advice = "Periksa kipas dan pengudaraan. Matikan komputer sebelum membersihkan habuk."
+                    elif any(word in name for word in ["monitor", "display", "paparan", "screen"]):
+                        problem = "Gambar berkaitan monitor atau paparan."
+                        diag = "Kemungkinan masalah paparan atau sambungan monitor."
+                        advice = "Periksa kabel paparan, sambungan monitor dan bekalan kuasa."
                     elif "ram" in name:
-                        problem = "Kemungkinan masalah pada RAM."
-                        advice = (
-                            "1. Periksa pemasangan RAM.\n"
-                            "2. Putuskan kuasa sebelum memeriksa RAM.\n"
-                            "3. Uji RAM atau slot lain jika perlu."
-                        )
-
-                    elif any(w in name for w in (
-                        "wifi", "lan", "network", "kabel"
-                    )):
-                        problem = (
-                            "Kemungkinan masalah sambungan rangkaian."
-                        )
-                        advice = (
-                            "1. Periksa kabel rangkaian.\n"
-                            "2. Periksa port LAN.\n"
-                            "3. Periksa sambungan Wi-Fi."
-                        )
-
+                        problem = "Gambar berkaitan RAM."
+                        diag = "Kemungkinan masalah pemasangan atau memori RAM."
+                        advice = "Minta juruteknik memeriksa RAM dengan komputer dimatikan."
+                    elif any(word in name for word in ["wifi", "network", "lan", "kabel"]):
+                        problem = "Gambar berkaitan rangkaian komputer."
+                        diag = "Kemungkinan masalah sambungan rangkaian."
+                        advice = "Periksa kabel LAN, Wi-Fi, router dan adapter rangkaian."
                     else:
-                        problem = (
-                            "Gambar dimuat naik, tetapi masalah "
-                            "belum dikenal pasti."
-                        )
-                        advice = (
-                            "Periksa gambar dan keadaan komputer secara "
-                            "fizikal. Analisis ini berdasarkan nama fail, "
-                            "bukan pengecaman visual AI."
-                        )
+                        problem = "Gambar komputer dimuat naik: " + filename
+                        diag = "Gambar berjaya dimuat naik, tetapi masalah khusus tidak dapat disahkan melalui nama fail sahaja."
+                        advice = "Periksa gambar dan masukkan simptom komputer dalam fungsi Diagnosis Komputer untuk analisis berdasarkan maklumat."
 
-                    save_report(
-                        "Analisis gambar: " + filename,
-                        problem,
-                        advice
-                    )
-
-                    result = (
-                        "Gambar berjaya dimuat naik.\n\n"
-                        "KEMUNGKINAN MASALAH:\n" + problem
-                        + "\n\nCADANGAN TEKNISYEN:\n" + advice
-                    )
-
+                    save_report(problem, diag, advice)
+                    result = f"""
+                    <div class="result">
+                    <b>ANALISIS GAMBAR</b><br>
+                    <b>Masalah:</b> {problem}<br>
+                    <b>Diagnosis:</b> {diag}<br>
+                    <b>Cadangan:</b> {advice}
+                    </div>
+                    """
                 except Exception:
-                    result = (
-                        "Fail tidak dapat dibaca sebagai gambar yang sah. "
-                        "Cuba fail JPG atau PNG."
-                    )
+                    result = '<div class="result">Fail tersebut bukan gambar yang sah atau tidak dapat dibaca.</div>'
 
-    body = """
-    <section class="card">
-        <h2>UPLOAD GAMBAR</h2>
-
-        <form method="post" enctype="multipart/form-data">
-            <label for="gambar">
-                Pilih gambar masalah komputer (JPG/PNG, maksimum 5 MB):
-            </label>
-
-            <input id="gambar" name="gambar" type="file"
-                accept=".jpg,.jpeg,.png" required>
-
-            <button class="btn green" type="submit">
-                UPLOAD & ANALISIS GAMBAR
-            </button>
-        </form>
-
-        {% if preview %}
-            <img class="preview" src="{{ preview }}"
-                alt="Gambar yang dimuat naik">
-        {% endif %}
-
-        {% if result %}
-            <h3>Hasil Analisis</h3>
-            <div class="result">{{ result }}</div>
-        {% endif %}
-
-        <p class="muted">
-            Versi ini menggunakan nama fail sebagai petunjuk awal;
-            ia belum menggunakan pengecaman visual AI sebenar.
-        </p>
-
-        <div class="page-buttons">
-            <a class="btn red" href="{{ url_for('menu') }}">
-                KEMBALI KE MENU
-            </a>
-        </div>
-    </section>
+    content = """
+    <div class="container">
+      <h1>UPLOAD GAMBAR</h1>
+      <p>Muat naik gambar komputer atau komponen yang ingin diperiksa.</p>
+      <form method="post" enctype="multipart/form-data">
+        <label>Pilih gambar (JPG, JPEG atau PNG):</label>
+        <input type="file" name="image" accept=".jpg,.jpeg,.png" required>
+        <button class="button green" type="submit">ANALISIS MASALAH</button>
+      </form>
+      """ + preview + result + """
+      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+    </div>
     """
+    return page(content)
 
-    return render_page(
-        "Upload Gambar",
-        render_template_string(
-            body, result=result, preview=preview
-        )
-    )
-
-
-# ---------------------------------
-# TECHNICIAN REPORT - PDF
-# ---------------------------------
-
-@app.route("/report", methods=["GET", "POST"])
-def technician_report():
-    info = get_report()
-
-    if request.method == "POST":
-        info = {
-            "problem": request.form.get("problem", "").strip(),
-            "diagnosis": request.form.get("diagnosis", "").strip(),
-            "advice": request.form.get("advice", "").strip(),
-        }
-
-        if not all(info.values()):
-            body = """
-            <section class="card">
-                <h2>TECHNICIAN REPORT</h2>
-                <p>Sila lengkapkan semua maklumat laporan.</p>
-                <a class="btn" href="{{ url_for('technician_report') }}">
-                    KEMBALI KE LAPORAN
-                </a>
-            </section>
-            """
-            return render_page(
-                "Technician Report",
-                render_template_string(body)
-            )
-
-        return make_pdf(info)
-
-    body = """
-    <section class="card">
-        <h2>TECHNICIAN REPORT</h2>
-
-        <p class="muted">
-            Maklumat diagnosis terakhir akan diisi secara automatik.
-            Sila buat analisis terlebih dahulu jika ruangan masih kosong.
-        </p>
-
-        <form method="post">
-            <label for="problem">Masalah komputer:</label>
-            <input id="problem" name="problem"
-                type="text" value="{{ info.problem }}" required>
-
-            <label for="diagnosis">Diagnosis:</label>
-            <textarea id="diagnosis" name="diagnosis"
-                required>{{ info.diagnosis }}</textarea>
-
-            <label for="advice">Cadangan teknisyen:</label>
-            <textarea id="advice" name="advice"
-                required>{{ info.advice }}</textarea>
-
-            <button class="btn purple" type="submit">
-                JANA PDF
-            </button>
-        </form>
-
-        <div class="page-buttons">
-            <a class="btn red" href="{{ url_for('menu') }}">
-                KEMBALI KE MENU
-            </a>
-        </div>
-    </section>
-    """
-
-    return render_page(
-        "Technician Report",
-        render_template_string(body, info=info)
-    )
-
-
-def make_pdf(info):
+def create_pdf(info):
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
-    pdf.setTitle("AI Smart Technician - Technician Report")
+    width, height = A4
+    left = 55
+    y = height - 65
 
-    page_width, page_height = A4
-    x = 50
-    y = page_height - 60
-    max_width = page_width - 100
-    line_height = 16
+    pdf.setTitle("AI SMART TECHNICIAN - Technician Report")
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.setFillColorRGB(31/255, 78/255, 121/255)
+    pdf.drawCentredString(width / 2, y, "AI SMART TECHNICIAN")
+    y -= 30
 
-    def write_text(text, font="Helvetica", size=11, after=0):
-        nonlocal y
+    pdf.setFillColorRGB(0, 0, 0)
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawCentredString(width / 2, y, "TECHNICIAN DIAGNOSTIC REPORT")
+    y -= 35
 
-        pdf.setFont(font, size)
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(left, y, "Tarikh dan Masa: " + datetime.now().strftime("%d/%m/%Y %H:%M"))
+    y -= 35
 
-        for paragraph in str(text).splitlines() or [""]:
-            lines = simpleSplit(
-                paragraph, font, size, max_width
-            ) or [""]
+    sections = [
+        ("MASALAH KOMPUTER", info.get("problem", "")),
+        ("DIAGNOSIS", info.get("diagnosis", "")),
+        ("CADANGAN TEKNISIEN", info.get("advice", ""))
+    ]
 
-            for line in lines:
-                if y < 60:
-                    pdf.showPage()
-                    y = page_height - 60
-                    pdf.setFont(font, size)
+    for heading, value in sections:
+        if y < 100:
+            pdf.showPage()
+            y = height - 65
 
-                safe_line = (
-                    line.encode("latin-1", "replace")
-                    .decode("latin-1")
-                )
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.setFillColorRGB(31/255, 78/255, 121/255)
+        pdf.drawString(left, y, heading)
+        y -= 22
 
-                pdf.drawString(x, y, safe_line)
-                y -= line_height
+        pdf.setFont("Helvetica", 11)
+        pdf.setFillColorRGB(0, 0, 0)
 
-        y -= after
+        # Tukar aksara khas supaya serasi dengan fon PDF standard.
+        safe_value = str(value).encode("latin-1", "replace").decode("latin-1")
+        lines = simpleSplit(safe_value, "Helvetica", 11, width - 2 * left)
 
-    write_text("AI SMART TECHNICIAN", "Helvetica-Bold", 20, 8)
-    write_text("TECHNICIAN DIAGNOSTIC REPORT",
-               "Helvetica-Bold", 14, 8)
-    write_text(
-        "Tarikh / Masa: " + datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "Helvetica", 10, 16
-    )
+        for line in lines or ["-"]:
+            if y < 65:
+                pdf.showPage()
+                y = height - 65
+                pdf.setFont("Helvetica", 11)
+            pdf.drawString(left, y, line)
+            y -= 17
 
-    write_text("MASALAH KOMPUTER", "Helvetica-Bold", 12, 2)
-    write_text(info["problem"], "Helvetica", 11, 12)
+        y -= 18
 
-    write_text("DIAGNOSIS", "Helvetica-Bold", 12, 2)
-    write_text(info["diagnosis"], "Helvetica", 11, 12)
+    if y < 60:
+        pdf.showPage()
+        y = height - 65
 
-    write_text("CADANGAN TEKNISYEN", "Helvetica-Bold", 12, 2)
-    write_text(info["advice"], "Helvetica", 11, 14)
-
-    # Kekalkan nama akademi; tiada tulisan PENGAJAR.
-    write_text("MESSI SKILLS ACADEMY", "Helvetica-Bold", 15)
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.setFillColorRGB(31/255, 78/255, 121/255)
+    pdf.drawCentredString(width / 2, y, "MESSI SKILLS ACADEMY")
 
     pdf.save()
     buffer.seek(0)
+    return buffer
 
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name="Technician_Report.pdf",
-        mimetype="application/pdf"
-    )
+@app.route("/report", methods=["GET", "POST"])
+def report():
+    info = session.get("report", {})
+    problem = request.form.get("problem", info.get("problem", ""))
+    diagnosis_text = request.form.get("diagnosis", info.get("diagnosis", ""))
+    advice = request.form.get("advice", info.get("advice", ""))
 
+    if request.method == "POST":
+        info = {
+            "problem": problem.strip(),
+            "diagnosis": diagnosis_text.strip(),
+            "advice": advice.strip()
+        }
 
-# ---------------------------------
-# KELUAR SISTEM
-# ---------------------------------
+        if not any(info.values()):
+            message = '<div class="result">Sila isi maklumat laporan terlebih dahulu.</div>'
+        else:
+            pdf_file = create_pdf(info)
+            return send_file(
+                pdf_file,
+                as_attachment=True,
+                download_name="Technician_Report.pdf",
+                mimetype="application/pdf"
+            )
+    else:
+        message = ""
+
+    content = """
+    <div class="container">
+      <h1>TECHNICIAN REPORT</h1>
+      <p>Maklumat daripada diagnosis terakhir akan diisi secara automatik jika tersedia.</p>
+      <form method="post">
+        <label>Masalah Komputer:</label>
+        <textarea name="problem">""" + problem.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
+        <label>Diagnosis:</label>
+        <textarea name="diagnosis">""" + diagnosis_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
+        <label>Cadangan Teknisi:</label>
+        <textarea name="advice">""" + advice.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
+        <button class="button purple" type="submit">JANA TECHNICIAN REPORT PDF</button>
+      </form>
+      """ + message + """
+      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+    </div>
+    """
+    return page(content)
 
 @app.route("/keluar")
 def keluar():
     session.clear()
     return redirect(url_for("home"))
 
-
 @app.errorhandler(413)
-def too_large(_error):
-    body = """
-    <section class="card">
-        <h2>Fail terlalu besar</h2>
-        <p>Sila pilih gambar yang tidak melebihi 5 MB.</p>
-        <a class="btn" href="/upload">Kembali</a>
-    </section>
-    """
-    return render_page(
-        "Fail Terlalu Besar", body
-    ), 413
-
+def file_too_large(error):
+    return page("""
+    <div class="container">
+      <h1>FAIL TERLALU BESAR</h1>
+      <p>Saiz maksimum gambar ialah 5 MB.</p>
+      <a class="button grey" href="/upload">KEMBALI</a>
+    </div>
+    """), 413
 
 if __name__ == "__main__":
     app.run(
@@ -962,4 +491,7 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
+
 
