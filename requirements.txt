@@ -1,5 +1,5 @@
-
 Flask
 Pillow
 reportlab
 gunicorn
+openai
