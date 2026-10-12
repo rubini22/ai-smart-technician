@@ -1,4 +1,4 @@
-base64
+e64
 import io
 import os
 import re
@@ -278,7 +278,7 @@ def make_pdf(info):
     write_text(info["diagnosis"], "Helvetica", 11, 12)
     write_text("CADANGAN TEKNISYEN", "Helvetica-Bold", 12, 2)
     write_text(info["advice"], "Helvetica", 11, 14)
-    write_text("PENGAJAR: MESSI SKILLS ACADEMY", "Helvetica-Bold", 9)
+    write_text("MESSI SKILLS ACADEMY", "Helvetica-Bold", 15)
     pdf.save()
     buffer.seek(0)
     return send_file(buffer, as_attachment=True, download_name="Technician_Report.pdf", mimetype="application/pdf")
@@ -294,6 +294,4 @@ def too_large(_error):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
-
-
 
