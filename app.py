@@ -1,4 +1,5 @@
 import os
+from openai import OpenAI
 import io
 import re
 import subprocess
@@ -129,40 +130,51 @@ def save_report(problem, diagnosis, advice):
         "advice": advice
     }
 
+
 def diagnosis_computer(problem):
-    text = problem.lower()
+    try:
+        client = OpenAI(
+            api_key=os.environ.get("OPENAI_API_KEY")
+        )
 
-    if any(word in text for word in ["tak hidup", "tidak hidup", "tak boleh hidup", "tidak boleh hidup"]):
-        diagnosis = "Komputer tidak dapat dihidupkan."
-        advice = "Periksa kabel kuasa, soket elektrik, pengecas dan bekalan kuasa komputer."
+        if not os.environ.get("OPENAI_API_KEY"):
+            return (
+                "API KEY TIDAK DIJUMPAI",
+                "Sila semak OPENAI_API_KEY dalam Environment Variables di Render."
+            )
 
-    elif any(word in text for word in ["slow", "lambat", "perlahan", "lembap"]):
-        diagnosis = "Komputer berkemungkinan mengalami prestasi perlahan."
-        advice = "Semak penggunaan CPU dan RAM, tutup aplikasi tidak diperlukan dan periksa ruang storan."
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            instructions=(
+                "Anda ialah AI Smart Technician, pembantu teknikal "
+                "komputer dan rangkaian. Jawab dalam Bahasa Melayu. "
+                "Analisis simptom yang diberikan. Berikan diagnosis "
+                "yang berkemungkinan, punca masalah, langkah pemeriksaan "
+                "dan cadangan penyelesaian yang selamat. Jangan mendakwa "
+                "sesuatu komponen rosak tanpa bukti yang mencukupi. "
+                "Jika maklumat tidak mencukupi, nyatakan perkara yang "
+                "perlu diperiksa."
+            ),
+            input=problem
+        )
 
-    elif any(word in text for word in ["monitor", "paparan", "display", "skrin"]):
-        diagnosis = "Masalah paparan mungkin berpunca daripada monitor, kabel atau grafik."
-        advice = "Periksa kabel HDMI/VGA, sambungan monitor dan pastikan monitor menerima kuasa."
+        diagnosis = response.output_text.strip()
 
-    elif any(word in text for word in ["internet", "wifi", "wi-fi", "network", "rangkaian"]):
-        diagnosis = "Masalah mungkin berkaitan sambungan rangkaian."
-        advice = "Periksa Wi-Fi atau kabel LAN, status adapter rangkaian dan sambungan router."
+        advice = (
+            "Ikuti langkah pemeriksaan yang dicadangkan oleh AI. "
+            "Matikan komputer sebelum memeriksa komponen dalaman."
+        )
 
-    elif any(word in text for word in ["panas", "overheat", "habuk", "berhabuk"]):
-        diagnosis = "Komputer mungkin mengalami masalah suhu tinggi atau pengumpulan habuk."
-        advice = "Periksa kipas dan pengudaraan. Matikan komputer sebelum membersihkan habuk."
+        return diagnosis, advice
 
-    elif "ram" in text:
-        diagnosis = "Masalah mungkin berkaitan RAM atau sambungan memori."
-        advice = "Matikan komputer dan minta juruteknik memeriksa pemasangan RAM dengan selamat."
+    except Exception as e:
+        print("Ralat OpenAI:", str(e))
+        return (
+            "AI tidak dapat membuat diagnosis pada masa ini.",
+            "Semak API key, baki kredit atau billing OpenAI, "
+            "nama model dan log aplikasi di Render."
+        )
 
-    else:
-        diagnosis = "Masalah belum dapat dikenal pasti berdasarkan maklumat yang diberikan."
-        advice = "Semak mesej ralat, sambungan perkakasan dan simptom komputer dengan lebih terperinci."
-
-    return diagnosis, advice
-
-@app.route("/")
 def home():
     content = """
     <div class="container" style="max-width:750px; padding-top:65px; padding-bottom:55px;">
@@ -175,6 +187,7 @@ def home():
     return page(content)
 
 @app.route("/menu")
+
 def menu():
     content = """
     <div class="container">
@@ -491,6 +504,8 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
 
 
 
