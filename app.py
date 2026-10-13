@@ -290,6 +290,298 @@ def home():
     """
     return page(content)
 
+import os
+from openai import OpenAI
+import io
+import re
+import subprocess
+import shutil
+import socket
+from datetime import datetime
+
+from flask import (
+    Flask, request, render_template_string,
+    send_file, session, redirect, url_for
+)
+from werkzeug.utils import secure_filename
+from PIL import Image
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import simpleSplit
+from reportlab.pdfgen import canvas
+
+app = Flask(__name__)
+app.secret_key = os.environ.get(
+    "SECRET_KEY", "ai-smart-technician-secret-key"
+)
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
+
+BG = "#EAF2F8"
+BLUE = "#1F4E79"
+RED = "#C0392B"
+GREEN = "#148F77"
+PURPLE = "#7D3C98"
+LIGHT_BLUE = "#2874A6"
+
+STYLE = """
+<style>
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 25px 15px;
+    background: #EAF2F8;
+    font-family: Arial, sans-serif;
+    color: #263746;
+}
+.container {
+    max-width: 850px;
+    margin: 20px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px #00000015;
+}
+h1 {
+    color: #1F4E79;
+    text-align: center;
+    font-size: 30px;
+    margin-bottom: 8px;
+}
+h2 { color: #1F4E79; }
+.subtitle { text-align: center; margin-bottom: 25px; }
+.version { color: #C0392B; font-weight: bold; text-align: center; }
+.academy { color: #1F4E79; font-weight: bold; text-align: center; }
+.menu-title { color: #555; text-align: center; font-weight: bold; }
+.description { text-align: center; margin: 20px 0; }
+.button {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    margin: 12px 0;
+    border: none;
+    border-radius: 7px;
+    color: white;
+    text-decoration: none;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.blue { background: #1F4E79; }
+.lightblue { background: #2874A6; }
+.green { background: #148F77; }
+.purple { background: #7D3C98; }
+.red { background: #C0392B; }
+.grey { background: #626567; }
+label { display: block; margin-top: 16px; font-weight: bold; }
+input[type=text], input[type=file], textarea {
+    width: 100%;
+    padding: 12px;
+    margin-top: 7px;
+    border: 1px solid #ccd5dd;
+    border-radius: 6px;
+    font-family: Arial, sans-serif;
+    font-size: 15px;
+}
+textarea { min-height: 110px; resize: vertical; }
+.result {
+    margin-top: 20px;
+    padding: 16px;
+    background: #F2F8FC;
+    border-left: 5px solid #1F4E79;
+    border-radius: 5px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+img.preview { display: block; max-width: 100%; max-height: 350px;
+    margin: 20px auto; border-radius: 8px; }
+.footer { text-align: center; color: #667; font-size: 13px; margin-top: 25px; }
+</style>
+"""
+
+def page(content, title="AI SMART COMPUTER TECHNICIAN"):
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html lang="ms">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>{{ title }}</title>
+      """ + STYLE + """
+    </head>
+    <body>
+      {{ content|safe }}
+      <div class="footer">AI SMART COMPUTER TECHNICIAN | MESSI SKILLS ACADEMY</div>
+    </body>
+    </html>
+    """, content=content, title=title)
+
+def save_report(problem, diagnosis, advice):
+    session["report"] = {
+        "problem": problem,
+        "diagnosis": diagnosis,
+        "advice": advice
+    }
+
+
+def diagnosis_computer(problem):
+    problem_lower = problem.lower()
+
+    # 1. Komputer lambat
+    if any(k in problem_lower for k in [
+        "lambat", "slow", "hang", "lag", "tersekat"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: RAM tidak mencukupi, "
+            "penggunaan CPU tinggi, storan hampir penuh "
+            "atau terlalu banyak aplikasi berjalan."
+        )
+        advice = (
+            "1. Tutup aplikasi yang tidak diperlukan.\n"
+            "2. Semak penggunaan CPU dan RAM dalam Task Manager.\n"
+            "3. Semak ruang kosong pada storan.\n"
+            "4. Imbas komputer untuk malware jika perlu."
+        )
+
+    # 2. RAM berbunyi atau bunyi beep
+    elif any(k in problem_lower for k in [
+        "ram berbunyi", "bunyi beep", "bunyi bip",
+        "beep", "bip", "ram"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: RAM tidak dipasang dengan betul, "
+            "sambungan RAM bermasalah atau terdapat masalah "
+            "perkakasan lain. Bunyi beep sahaja tidak mengesahkan "
+            "RAM rosak."
+        )
+        advice = (
+            "1. Catat corak bunyi beep semasa komputer dihidupkan.\n"
+            "2. Matikan komputer dan cabut bekalan kuasa.\n"
+            "3. Minta juruteknik memeriksa dan memasang semula RAM "
+            "dengan langkah keselamatan yang betul.\n"
+            "4. Rujuk manual motherboard untuk maksud kod beep."
+        )
+
+    # 3. Komputer terlalu panas
+    elif any(k in problem_lower for k in [
+        "panas", "overheat", "overheating",
+        "suhu tinggi", "kipas bising"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: aliran udara terhalang, "
+            "habuk terkumpul, kipas tidak berfungsi "
+            "atau sistem penyejukan bermasalah."
+        )
+        advice = (
+            "1. Pastikan lubang pengudaraan tidak terhalang.\n"
+            "2. Periksa suhu dan kelajuan kipas.\n"
+            "3. Matikan komputer sebelum pembersihan.\n"
+            "4. Minta juruteknik memeriksa kipas dan sistem "
+            "penyejukan jika masalah berterusan."
+        )
+
+    # 4. Komputer tidak boleh dihidupkan
+    elif any(k in problem_lower for k in [
+        "tidak boleh hidup", "tak boleh hidup",
+        "tak hidup", "tidak hidup", "no power",
+        "tak boleh on", "tidak boleh on"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: bekalan kuasa terputus, "
+            "kabel kuasa longgar, adapter rosak atau "
+            "masalah pada power supply."
+        )
+        advice = (
+            "1. Periksa sambungan kabel kuasa.\n"
+            "2. Pastikan soket elektrik berfungsi.\n"
+            "3. Periksa adapter jika menggunakan komputer riba.\n"
+            "4. Jika masih gagal, minta juruteknik memeriksa "
+            "bekalan kuasa dan perkakasan."
+        )
+
+    # 5. Skrin atau monitor bermasalah
+    elif any(k in problem_lower for k in [
+        "skrin", "screen", "monitor",
+        "paparan", "display", "black screen"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: kabel paparan longgar, "
+            "monitor tidak menerima isyarat atau masalah "
+            "pada adapter grafik."
+        )
+        advice = (
+            "1. Pastikan monitor dihidupkan.\n"
+            "2. Periksa kabel HDMI, DisplayPort atau VGA.\n"
+            "3. Pilih input monitor yang betul.\n"
+            "4. Jika skrin masih gelap, periksa komputer "
+            "dan kad grafik."
+        )
+
+    # 6. Masalah Internet atau rangkaian
+    elif any(k in problem_lower for k in [
+        "internet", "wifi", "wi-fi", "network",
+        "rangkaian", "tiada connection",
+        "tiada sambungan", "tak boleh connect"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: sambungan Wi-Fi atau kabel LAN "
+            "bermasalah, konfigurasi IP tidak betul, "
+            "gateway tidak dapat dicapai atau gangguan Internet."
+        )
+        advice = (
+            "1. Periksa sambungan Wi-Fi atau kabel LAN.\n"
+            "2. Jalankan ipconfig untuk menyemak konfigurasi IP.\n"
+            "3. Uji sambungan menggunakan arahan ping.\n"
+            "4. Semak router dan gateway jika sambungan gagal."
+        )
+
+    # 7. Komputer terlalu bising
+    elif any(k in problem_lower for k in [
+        "bising", "bunyi kuat", "bunyi pelik",
+        "berbunyi kuat"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: kipas longgar atau kotor, "
+            "getaran komponen atau masalah pada storan mekanikal."
+        )
+        advice = (
+            "1. Kenal pasti sumber bunyi.\n"
+            "2. Periksa kipas dan pengudaraan.\n"
+            "3. Sandarkan data jika bunyi datang daripada "
+            "cakera keras mekanikal.\n"
+            "4. Minta juruteknik memeriksa komponen jika bunyi "
+            "berterusan."
+        )
+
+    # 8. Masalah lain
+    else:
+        diagnosis = (
+            "Maklumat belum mencukupi untuk mengenal pasti "
+            "punca masalah secara khusus."
+        )
+        advice = (
+            "1. Nyatakan simptom dengan lebih terperinci.\n"
+            "2. Catat mesej ralat yang dipaparkan.\n"
+            "3. Nyatakan bila masalah mula berlaku.\n"
+            "4. Periksa sambungan dan keadaan perkakasan "
+            "yang berkaitan."
+        )
+
+    return diagnosis, advice
+
+def home():
+
+    content = """
+    <div class="container" style="max-width:750px; padding-top:65px; padding-bottom:55px;">
+      <h1 style="font-size:34px;">AI SMART COMPUTER TECHNICIAN</h1>
+      <p class="subtitle">Sistem Bantuan Diagnosis Masalah Komputer</p>
+      <a class="button blue" href="/menu">MULA SISTEM</a>
+      <a class="button red" href="/keluar">KELUAR</a>
+    </div>
+    """
+    return page(content)
+
 
 @app.route("/")
 def index():
@@ -355,119 +647,6 @@ def diagnosis():
     return page(content)
 
 
-@app.route("/network", methods=["GET", "POST"])
-def network():
-    result = ""
-
-    if request.method == "POST":
-        host = request.form.get("host", "").strip()
-
-        if not re.fullmatch(r"[A-Za-z0-9.-]+", host):
-            result = (
-                '<div class="result">'
-                'Masukkan alamat IP atau nama hos yang sah.'
-                '</div>'
-            )
-        else:
-            ping_path = shutil.which("ping")
-
-            if ping_path is None:
-                result = (
-                    '<div class="result">'
-                    '<b>UJIAN PING TIDAK TERSEDIA</b><br>'
-                    'Server tidak mempunyai arahan ping. '
-                    'Konfigurasi server Render perlu diperiksa '
-                    'sebelum ujian ping boleh dijalankan.'
-                    '</div>'
-                )
-            else:
-                try:
-                    if os.name == "nt":
-                        command = [
-                            ping_path, "-n", "4", "-w", "3000", host
-                        ]
-                    else:
-                        command = [
-                            ping_path, "-c", "4", "-W", "3", host
-                        ]
-
-                    completed = subprocess.run(
-                        command,
-                        capture_output=True,
-                        text=True,
-                        timeout=20
-                    )
-
-                    output = (
-                        completed.stdout
-                        or completed.stderr
-                        or "Tiada output diterima."
-                    )
-
-                    diagnosis_text = (
-                        "Ping menerima respons daripada hos."
-                        if completed.returncode == 0
-                        else "Ping gagal atau hos tidak memberikan respons."
-                    )
-
-                    save_report(
-                        "Ujian ping ke " + host,
-                        diagnosis_text,
-                        "Semak alamat IP, kabel rangkaian, Wi-Fi, "
-                        "gateway dan firewall jika ping gagal."
-                    )
-
-                    safe_output = (
-                        output.replace("&", "&amp;")
-                        .replace("<", "&lt;")
-                        .replace(">", "&gt;")
-                    )
-
-                    result = (
-                        '<div class="result">'
-                        '<b>KEPUTUSAN PING</b><br>'
-                        + safe_output.replace("\n", "<br>")
-                        + '</div>'
-                    )
-
-                except subprocess.TimeoutExpired:
-                    result = (
-                        '<div class="result">'
-                        'Ujian ping mengambil masa terlalu lama. '
-                        'Sila cuba lagi.'
-                        '</div>'
-                    )
-
-                except OSError as exc:
-                    result = (
-                        '<div class="result">'
-                        'Ujian ping gagal dijalankan: '
-                        + str(exc).replace("&", "&amp;")
-                        .replace("<", "&lt;")
-                        .replace(">", "&gt;")
-                        + '</div>'
-                    )
-
-    content = """
-    <div class="container">
-      <h1>DIAGNOSIS NETWORK</h1>
-      <p>Masukkan alamat IP atau nama hos untuk menjalankan ujian ping.</p>
-      <form method="post">
-        <label>Alamat IP / Nama Hos:</label>
-        <input type="text" name="host" required
-               placeholder="Contoh: 8.8.8.8">
-        <button class="button lightblue" type="submit">
-          MULA UJIAN PING
-        </button>
-      </form>
-      """ + result + """
-      <a class="button grey" href="/menu">
-        KEMBALI KE MENU UTAMA
-      </a>
-    </div>
-    """
-
-    return page(content)
 
 def create_pdf(info):
     buffer = io.BytesIO()
@@ -630,4 +809,3 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
