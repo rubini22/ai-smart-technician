@@ -499,79 +499,183 @@ def network():
     return page(content)
 
 
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     result = ""
 
     if request.method == "POST":
-        file = request.files.get("image")
+        action = request.form.get("action", "upload")
+        filename = request.form.get("filename", "")
+        image_data = request.form.get("image_data", "")
 
-        if not file or not file.filename:
-            result = """
-            <div class="result">
-                Sila pilih gambar terlebih dahulu.
-            </div>
-            """
-        else:
-            filename = secure_filename(file.filename)
-            extension = filename.rsplit(".", 1)[-1].lower()
+        try:
+            if action == "upload":
+                file = request.files.get("image")
 
-            if extension not in ALLOWED_EXTENSIONS:
-                result = """
-                <div class="result">
-                    Format tidak dibenarkan.
-                    Gunakan gambar JPG, JPEG atau PNG.
-                </div>
-                """
-            else:
-                try:
-                    raw = file.read()
+                if not file or not file.filename:
+                    raise ValueError("Sila pilih gambar terlebih dahulu.")
 
-                    # Sahkan bahawa fail benar-benar gambar.
-                    img = Image.open(io.BytesIO(raw))
-                    img.verify()
+                filename = secure_filename(file.filename)
+                extension = filename.rsplit(".", 1)[-1].lower()
 
-                    # Semak format sebenar gambar.
-                    img = Image.open(io.BytesIO(raw))
-
-                    if img.format not in ("JPEG", "PNG"):
-                        raise ValueError("Format gambar tidak sah")
-
-                    mime = (
-                        "image/jpeg"
-                        if img.format == "JPEG"
-                        else "image/png"
+                if extension not in ALLOWED_EXTENSIONS:
+                    raise ValueError(
+                        "Gunakan gambar JPG, JPEG atau PNG sahaja."
                     )
 
-                    image_data = base64.b64encode(
-                        raw
-                    ).decode("ascii")
+                raw = file.read()
 
-                    result = f"""
-                    <div class="result">
-                        <b>Gambar berjaya dimuat naik!</b>
-                        <p>Nama fail: {escape(filename)}</p>
-                        <img class="preview"
-                             src="data:{mime};base64,{image_data}"
-                             alt="Pratonton gambar komputer">
-                    </div>
-                    """
+                img = Image.open(io.BytesIO(raw))
+                img.verify()
 
-                except Exception:
-                    result = """
-                    <div class="result">
-                        Gambar tidak dapat dibaca.
-                        Sila pilih fail JPG, JPEG atau PNG
-                        yang sah dan cuba lagi.
-                    </div>
-                    """
+                img = Image.open(io.BytesIO(raw))
+                img.load()
+
+                if img.format not in ("JPEG", "PNG"):
+                    raise ValueError("Format gambar tidak sah.")
+
+                # Kecilkan gambar supaya mudah dihantar kepada AI.
+                img.thumbnail((1200, 1200))
+
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                elif img.mode == "L":
+                    img = img.convert("RGB")
+
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=75)
+                image_data = base64.b64encode(
+                    buffer.getvalue()
+                ).decode("ascii")
+
+            if not image_data:
+                raise ValueError(
+                    "Sila upload gambar terlebih dahulu."
+                )
+
+            preview = f"""
+            <div class="result">
+                <b>Gambar berjaya dimuat naik!</b>
+                <p>Nama fail: {escape(filename)}</p>
+                <img class="preview"
+                     src="data:image/jpeg;base64,{image_data}"
+                     alt="Gambar komputer">
+            </div>
+            """
+
+            if action == "analyze":
+                api_key = os.environ.get("OPENAI_API_KEY")
+
+                if not api_key:
+                    raise ValueError(
+                        "API Key AI belum ditetapkan. "
+                        "Sila semak Environment Variables di Render."
+                    )
+
+                client = OpenAI(api_key=api_key)
+
+                response = client.responses.create(
+                    model="gpt-4o-mini",
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": (
+                                        "Anda ialah pembantu teknisyen "
+                                        "komputer. Analisis gambar ini. "
+                                        "Kenal pasti kerosakan yang "
+                                        "benar-benar kelihatan. Jika "
+                                        "punca tidak dapat dipastikan "
+                                        "melalui gambar, nyatakan "
+                                        "ketidakpastian itu. Berikan "
+                                        "jawapan dalam Bahasa Melayu "
+                                        "dengan bahagian: PEMERHATIAN, "
+                                        "KEMUNGKINAN MASALAH, "
+                                        "CADANGAN PEMERIKSAAN dan "
+                                        "LANGKAH PENYELESAIAN."
+                                    )
+                                },
+                                {
+                                    "type": "input_image",
+                                    "image_url": (
+                                        "data:image/jpeg;base64,"
+                                        + image_data
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                )
+
+                diagnosis_text = response.output_text.strip()
+
+                if not diagnosis_text:
+                    raise ValueError(
+                        "AI tidak memberikan hasil. Sila cuba lagi."
+                    )
+
+                problem = "Analisis gambar: " + filename
+                advice = (
+                    "Ikuti cadangan pemeriksaan dan penyelesaian "
+                    "dalam hasil diagnosis AI. Sahkan punca sebenar "
+                    "dengan pemeriksaan teknikal."
+                )
+
+                save_report(problem, diagnosis_text, advice)
+
+                result = preview + """
+                <div class="result">
+                    <b>HASIL ANALISIS AI</b>
+                    <p>""" + escape(diagnosis_text).replace(
+                        "\n", "<br>"
+                    ) + """</p>
+                </div>
+                <p>Laporan diagnosis telah disimpan ke sesi sistem.</p>
+                """
+
+            else:
+                result = preview + """
+                <form method="post">
+                    <input type="hidden" name="action"
+                           value="analyze">
+                    <input type="hidden" name="filename"
+                           value="""" + escape(filename) + """">
+                    <input type="hidden" name="image_data"
+                           value="""" + image_data + """">
+                    <button class="button purple" type="submit">
+                        ANALISIS MASALAH
+                    </button>
+                </form>
+                """
+
+        except ValueError as e:
+            result = (
+                '<div class="result">'
+                + escape(str(e))
+                + '</div>'
+            )
+
+        except Exception:
+            app.logger.exception("Ralat semasa analisis gambar")
+            result = """
+            <div class="result">
+                Analisis gagal. Sila semak API Key, baki kredit
+                API, sambungan Internet atau log ralat Render.
+                Kemudian cuba lagi.
+            </div>
+            """
 
     content = """
     <div class="container">
         <h1>UPLOAD GAMBAR</h1>
-        <p>Muat naik gambar untuk melihat pratonton.</p>
+        <p>Muat naik gambar komputer untuk dianalisis oleh AI.</p>
 
         <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload">
+
             <label>Pilih gambar komputer:</label>
             <input type="file" name="image"
                    accept=".jpg,.jpeg,.png" required>
@@ -586,8 +690,8 @@ def upload():
         </a>
     </div>
     """
-    return page(content)
 
+    return page(content)
 
 @app.route("/report")
 def report():
@@ -682,3 +786,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
