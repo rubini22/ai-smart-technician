@@ -280,7 +280,7 @@ def home():
 
     content = """
     <div class="container" style="max-width:750px; padding-top:65px; padding-bottom:55px;">
-      <h1 style="font-size:34px;">AI SMART TECHNICIAN</h1>
+      <h1 style="font-size:34px;">AI SMART COMPUTER TECHNICIAN</h1>
       <p class="subtitle">Sistem Bantuan Diagnosis Masalah Komputer</p>
       <a class="button blue" href="/menu">MULA SISTEM</a>
       <a class="button red" href="/keluar">KELUAR</a>
@@ -299,7 +299,7 @@ def index():
 def menu():
     content = """
     <div class="container">
-      <h1>AI SMART TECHNICIAN</h1>
+      <h1>AI SMART COMPUTER TECHNICIAN</h1>
       <p class="version">VERSION 1.0</p>
       <p class="academy">MESSI SKILLS ACADEMY</p>
       <p class="menu-title">MENU UTAMA</p>
@@ -488,7 +488,7 @@ def create_pdf(info):
     pdf.setTitle("AI SMART COMPUTER TECHNICIAN - Technician Report")
     pdf.setFont("Helvetica-Bold", 20)
     pdf.setFillColorRGB(31/255, 78/255, 121/255)
-    pdf.drawCentredString(width / 2, y, "AI SMART TECHNICIAN")
+    pdf.drawCentredString(width / 2, y, "AI SMART COMPUTER TECHNICIAN")
     y -= 30
 
     pdf.setFillColorRGB(0, 0, 0)
