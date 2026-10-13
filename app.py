@@ -661,7 +661,7 @@ def report_pdf():
         download_name="Technician_Report.pdf"
     )
 
-@@app.route("/keluar")
+@app.route("/keluar")
 def keluar():
     session.clear()
     return redirect(url_for("index"))
@@ -682,4 +682,3 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
