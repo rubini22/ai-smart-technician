@@ -536,7 +536,8 @@ def create_pdf(info):
     buffer.seek(0)
     return buffer
 
- @app.route("/network", methods=["GET", "POST"])
+ 
+@app.route("/network", methods=["GET", "POST"])
 def network():
     result = ""
 
@@ -561,20 +562,6 @@ def network():
                         + " melalui port 443."
                     )
 
-                save_report(
-                    "Ujian sambungan ke " + host,
-                    status,
-                    detail
-                )
-
-                result = (
-                    '<div class="result"><b>'
-                    + status
-                    + '</b><br>'
-                    + detail
-                    + '</div>'
-                )
-
             except OSError:
                 status = "SAMBUNGAN GAGAL"
                 detail = (
@@ -584,19 +571,19 @@ def network():
                     "Hos mungkin tidak tersedia atau port ditutup."
                 )
 
-                save_report(
-                    "Ujian sambungan ke " + host,
-                    status,
-                    detail
-                )
+            save_report(
+                "Ujian sambungan ke " + host,
+                status,
+                detail
+            )
 
-                result = (
-                    '<div class="result"><b>'
-                    + status
-                    + '</b><br>'
-                    + detail
-                    + '</div>'
-                )
+            result = (
+                '<div class="result"><b>'
+                + status
+                + '</b><br>'
+                + detail
+                + '</div>'
+            )
 
     content = """
     <div class="container">
@@ -619,6 +606,7 @@ def network():
       </a>
     </div>
     """
+
     return page(content)
 
 @app.route("/keluar")
@@ -642,3 +630,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
