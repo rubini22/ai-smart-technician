@@ -4,6 +4,7 @@ import io
 import re
 import subprocess
 import shutil
+import socket
 from datetime import datetime
 
 from flask import (
@@ -535,48 +536,87 @@ def create_pdf(info):
     buffer.seek(0)
     return buffer
 
-@app.route("/report", methods=["GET", "POST"])
-def report():
-    info = session.get("report", {})
-    problem = request.form.get("problem", info.get("problem", ""))
-    diagnosis_text = request.form.get("diagnosis", info.get("diagnosis", ""))
-    advice = request.form.get("advice", info.get("advice", ""))
+ @app.route("/network", methods=["GET", "POST"])
+def network():
+    result = ""
 
     if request.method == "POST":
-        info = {
-            "problem": problem.strip(),
-            "diagnosis": diagnosis_text.strip(),
-            "advice": advice.strip()
-        }
+        host = request.form.get("host", "").strip()
 
-        if not any(info.values()):
-            message = '<div class="result">Sila isi maklumat laporan terlebih dahulu.</div>'
-        else:
-            pdf_file = create_pdf(info)
-            return send_file(
-                pdf_file,
-                as_attachment=True,
-                download_name="Technician_Report.pdf",
-                mimetype="application/pdf"
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", host):
+            result = (
+                '<div class="result">'
+                'Masukkan alamat IP atau nama hos yang sah.'
+                '</div>'
             )
-    else:
-        message = ""
+        else:
+            try:
+                with socket.create_connection(
+                    (host, 443), timeout=5
+                ):
+                    status = "SAMBUNGAN BERJAYA"
+                    detail = (
+                        "Server berjaya menyambung ke "
+                        + host
+                        + " melalui port 443."
+                    )
+
+                save_report(
+                    "Ujian sambungan ke " + host,
+                    status,
+                    detail
+                )
+
+                result = (
+                    '<div class="result"><b>'
+                    + status
+                    + '</b><br>'
+                    + detail
+                    + '</div>'
+                )
+
+            except OSError:
+                status = "SAMBUNGAN GAGAL"
+                detail = (
+                    "Server tidak dapat menyambung ke "
+                    + host
+                    + " melalui port 443. "
+                    "Hos mungkin tidak tersedia atau port ditutup."
+                )
+
+                save_report(
+                    "Ujian sambungan ke " + host,
+                    status,
+                    detail
+                )
+
+                result = (
+                    '<div class="result"><b>'
+                    + status
+                    + '</b><br>'
+                    + detail
+                    + '</div>'
+                )
 
     content = """
     <div class="container">
-      <h1>TECHNICIAN REPORT</h1>
-      <p>Maklumat daripada diagnosis terakhir akan diisi secara automatik jika tersedia.</p>
+      <h1>DIAGNOSIS NETWORK</h1>
+      <p>
+        Uji sambungan dari server website ke alamat hos
+        melalui port HTTPS 443.
+      </p>
       <form method="post">
-        <label>Masalah Komputer:</label>
-        <textarea name="problem">""" + problem.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
-        <label>Diagnosis:</label>
-        <textarea name="diagnosis">""" + diagnosis_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
-        <label>Cadangan Teknisi:</label>
-        <textarea name="advice">""" + advice.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + """</textarea>
-        <button class="button purple" type="submit">JANA TECHNICIAN REPORT PDF</button>
+        <label>Alamat IP / Nama Hos:</label>
+        <input type="text" name="host" required
+               placeholder="Contoh: 1.1.1.1">
+        <button class="button lightblue" type="submit">
+          UJI SAMBUNGAN
+        </button>
       </form>
-      """ + message + """
-      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+      """ + result + """
+      <a class="button grey" href="/menu">
+        KEMBALI KE MENU UTAMA
+      </a>
     </div>
     """
     return page(content)
@@ -602,6 +642,3 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
-
-     
