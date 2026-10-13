@@ -186,6 +186,12 @@ def home():
     """
     return page(content)
 
+
+@app.route("/")
+def index():
+    return home()
+
+
 @app.route("/menu")
 
 def menu():
