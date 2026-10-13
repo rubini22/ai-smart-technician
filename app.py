@@ -276,9 +276,8 @@ def diagnosis_computer(problem):
 
     return diagnosis, advice
 
-        )
-
 def home():
+
     content = """
     <div class="container" style="max-width:750px; padding-top:65px; padding-bottom:55px;">
       <h1 style="font-size:34px;">AI SMART TECHNICIAN</h1>
@@ -613,4 +612,3 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
