@@ -106,7 +106,7 @@ img.preview { display: block; max-width: 100%; max-height: 350px;
 </style>
 """
 
-def page(content, title="AI SMART TECHNICIAN"):
+def page(content, title="AI SMART COMPUTER TECHNICIAN"):
     return render_template_string("""
     <!DOCTYPE html>
     <html lang="ms">
@@ -118,7 +118,7 @@ def page(content, title="AI SMART TECHNICIAN"):
     </head>
     <body>
       {{ content|safe }}
-      <div class="footer">AI SMART TECHNICIAN | MESSI SKILLS ACADEMY</div>
+      <div class="footer">AI SMART COMPUTER TECHNICIAN | MESSI SKILLS ACADEMY</div>
     </body>
     </html>
     """, content=content, title=title)
@@ -132,47 +132,150 @@ def save_report(problem, diagnosis, advice):
 
 
 def diagnosis_computer(problem):
-    try:
-        client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY")
+    problem_lower = problem.lower()
+
+    # 1. Komputer lambat
+    if any(k in problem_lower for k in [
+        "lambat", "slow", "hang", "lag", "tersekat"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: RAM tidak mencukupi, "
+            "penggunaan CPU tinggi, storan hampir penuh "
+            "atau terlalu banyak aplikasi berjalan."
         )
-
-        if not os.environ.get("OPENAI_API_KEY"):
-            return (
-                "API KEY TIDAK DIJUMPAI",
-                "Sila semak OPENAI_API_KEY dalam Environment Variables di Render."
-            )
-
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            instructions=(
-                "Anda ialah AI Smart Technician, pembantu teknikal "
-                "komputer dan rangkaian. Jawab dalam Bahasa Melayu. "
-                "Analisis simptom yang diberikan. Berikan diagnosis "
-                "yang berkemungkinan, punca masalah, langkah pemeriksaan "
-                "dan cadangan penyelesaian yang selamat. Jangan mendakwa "
-                "sesuatu komponen rosak tanpa bukti yang mencukupi. "
-                "Jika maklumat tidak mencukupi, nyatakan perkara yang "
-                "perlu diperiksa."
-            ),
-            input=problem
-        )
-
-        diagnosis = response.output_text.strip()
-
         advice = (
-            "Ikuti langkah pemeriksaan yang dicadangkan oleh AI. "
-            "Matikan komputer sebelum memeriksa komponen dalaman."
+            "1. Tutup aplikasi yang tidak diperlukan.\n"
+            "2. Semak penggunaan CPU dan RAM dalam Task Manager.\n"
+            "3. Semak ruang kosong pada storan.\n"
+            "4. Imbas komputer untuk malware jika perlu."
         )
 
-        return diagnosis, advice
+    # 2. RAM berbunyi atau bunyi beep
+    elif any(k in problem_lower for k in [
+        "ram berbunyi", "bunyi beep", "bunyi bip",
+        "beep", "bip", "ram"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: RAM tidak dipasang dengan betul, "
+            "sambungan RAM bermasalah atau terdapat masalah "
+            "perkakasan lain. Bunyi beep sahaja tidak mengesahkan "
+            "RAM rosak."
+        )
+        advice = (
+            "1. Catat corak bunyi beep semasa komputer dihidupkan.\n"
+            "2. Matikan komputer dan cabut bekalan kuasa.\n"
+            "3. Minta juruteknik memeriksa dan memasang semula RAM "
+            "dengan langkah keselamatan yang betul.\n"
+            "4. Rujuk manual motherboard untuk maksud kod beep."
+        )
 
-    except Exception as e:
-        print("Ralat OpenAI:", str(e))
-        return (
-            "AI tidak dapat membuat diagnosis pada masa ini.",
-            "Semak API key, baki kredit atau billing OpenAI, "
-            "nama model dan log aplikasi di Render."
+    # 3. Komputer terlalu panas
+    elif any(k in problem_lower for k in [
+        "panas", "overheat", "overheating",
+        "suhu tinggi", "kipas bising"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: aliran udara terhalang, "
+            "habuk terkumpul, kipas tidak berfungsi "
+            "atau sistem penyejukan bermasalah."
+        )
+        advice = (
+            "1. Pastikan lubang pengudaraan tidak terhalang.\n"
+            "2. Periksa suhu dan kelajuan kipas.\n"
+            "3. Matikan komputer sebelum pembersihan.\n"
+            "4. Minta juruteknik memeriksa kipas dan sistem "
+            "penyejukan jika masalah berterusan."
+        )
+
+    # 4. Komputer tidak boleh dihidupkan
+    elif any(k in problem_lower for k in [
+        "tidak boleh hidup", "tak boleh hidup",
+        "tak hidup", "tidak hidup", "no power",
+        "tak boleh on", "tidak boleh on"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: bekalan kuasa terputus, "
+            "kabel kuasa longgar, adapter rosak atau "
+            "masalah pada power supply."
+        )
+        advice = (
+            "1. Periksa sambungan kabel kuasa.\n"
+            "2. Pastikan soket elektrik berfungsi.\n"
+            "3. Periksa adapter jika menggunakan komputer riba.\n"
+            "4. Jika masih gagal, minta juruteknik memeriksa "
+            "bekalan kuasa dan perkakasan."
+        )
+
+    # 5. Skrin atau monitor bermasalah
+    elif any(k in problem_lower for k in [
+        "skrin", "screen", "monitor",
+        "paparan", "display", "black screen"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: kabel paparan longgar, "
+            "monitor tidak menerima isyarat atau masalah "
+            "pada adapter grafik."
+        )
+        advice = (
+            "1. Pastikan monitor dihidupkan.\n"
+            "2. Periksa kabel HDMI, DisplayPort atau VGA.\n"
+            "3. Pilih input monitor yang betul.\n"
+            "4. Jika skrin masih gelap, periksa komputer "
+            "dan kad grafik."
+        )
+
+    # 6. Masalah Internet atau rangkaian
+    elif any(k in problem_lower for k in [
+        "internet", "wifi", "wi-fi", "network",
+        "rangkaian", "tiada connection",
+        "tiada sambungan", "tak boleh connect"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: sambungan Wi-Fi atau kabel LAN "
+            "bermasalah, konfigurasi IP tidak betul, "
+            "gateway tidak dapat dicapai atau gangguan Internet."
+        )
+        advice = (
+            "1. Periksa sambungan Wi-Fi atau kabel LAN.\n"
+            "2. Jalankan ipconfig untuk menyemak konfigurasi IP.\n"
+            "3. Uji sambungan menggunakan arahan ping.\n"
+            "4. Semak router dan gateway jika sambungan gagal."
+        )
+
+    # 7. Komputer terlalu bising
+    elif any(k in problem_lower for k in [
+        "bising", "bunyi kuat", "bunyi pelik",
+        "berbunyi kuat"
+    ]):
+        diagnosis = (
+            "Kemungkinan punca: kipas longgar atau kotor, "
+            "getaran komponen atau masalah pada storan mekanikal."
+        )
+        advice = (
+            "1. Kenal pasti sumber bunyi.\n"
+            "2. Periksa kipas dan pengudaraan.\n"
+            "3. Sandarkan data jika bunyi datang daripada "
+            "cakera keras mekanikal.\n"
+            "4. Minta juruteknik memeriksa komponen jika bunyi "
+            "berterusan."
+        )
+
+    # 8. Masalah lain
+    else:
+        diagnosis = (
+            "Maklumat belum mencukupi untuk mengenal pasti "
+            "punca masalah secara khusus."
+        )
+        advice = (
+            "1. Nyatakan simptom dengan lebih terperinci.\n"
+            "2. Catat mesej ralat yang dipaparkan.\n"
+            "3. Nyatakan bila masalah mula berlaku.\n"
+            "4. Periksa sambungan dan keadaan perkakasan "
+            "yang berkaitan."
+        )
+
+    return diagnosis, advice
+
         )
 
 def home():
@@ -383,7 +486,7 @@ def create_pdf(info):
     left = 55
     y = height - 65
 
-    pdf.setTitle("AI SMART TECHNICIAN - Technician Report")
+    pdf.setTitle("AI SMART COMPUTER TECHNICIAN - Technician Report")
     pdf.setFont("Helvetica-Bold", 20)
     pdf.setFillColorRGB(31/255, 78/255, 121/255)
     pdf.drawCentredString(width / 2, y, "AI SMART TECHNICIAN")
@@ -510,9 +613,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
-
-
-
-
 
