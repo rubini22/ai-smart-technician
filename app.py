@@ -500,6 +500,7 @@ def network():
 
 
 
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     result = ""
@@ -507,33 +508,7 @@ def upload():
     if request.method == "POST":
         action = request.form.get("action", "upload")
         filename = request.form.get("filename", "")
-        image_data = request.form.get("image_data", "")
-        action = request.form.get("action", "upload")
-        filename = request.form.get("filename", "")
-        image_token = request.form.get("image_data", "")
         image_data = ""
-
-        if action == "analyze" and image_token:
-            try:
-                padding = "=" * (-len(image_token) % 4)
-                image_bytes = base64.urlsafe_b64decode(
-                    image_token + padding
-                )
-               
-                image_bytes = buffer.getvalue()
-
-                image_data = base64.b64encode(
-                    image_bytes
-                ).decode("ascii")
-
-                image_token = base64.urlsafe_b64encode(
-                    image_bytes
-                ).decode("ascii").rstrip("=")
-
-            except Exception:
-                raise ValueError(
-                    "Data gambar tidak sah. Sila upload semula."
-                )
 
         try:
             if action == "upload":
@@ -546,9 +521,7 @@ def upload():
                 extension = filename.rsplit(".", 1)[-1].lower()
 
                 if extension not in ALLOWED_EXTENSIONS:
-                    raise ValueError(
-                        "Gunakan gambar JPG, JPEG atau PNG sahaja."
-                    )
+                    raise ValueError("Gunakan gambar JPG, JPEG atau PNG sahaja.")
 
                 raw = file.read()
 
@@ -561,24 +534,41 @@ def upload():
                 if img.format not in ("JPEG", "PNG"):
                     raise ValueError("Format gambar tidak sah.")
 
-                # Kecilkan gambar supaya mudah dihantar kepada AI.
                 img.thumbnail((1200, 1200))
-
-                if img.mode not in ("RGB", "L"):
-                    img = img.convert("RGB")
-                elif img.mode == "L":
-                    img = img.convert("RGB")
+                img = img.convert("RGB")
 
                 buffer = io.BytesIO()
                 img.save(buffer, format="JPEG", quality=75)
+                image_bytes = buffer.getvalue()
+
                 image_data = base64.b64encode(
-                    buffer.getvalue()
+                    image_bytes
                 ).decode("ascii")
 
-            if not image_data:
-                raise ValueError(
-                    "Sila upload gambar terlebih dahulu."
+                image_token = base64.urlsafe_b64encode(
+                    image_bytes
+                ).decode("ascii").rstrip("=")
+
+            elif action == "analyze":
+                image_token = request.form.get("image_data", "")
+
+                if not image_token:
+                    raise ValueError("Data gambar tiada. Sila upload semula.")
+
+                padding = "=" * (-len(image_token) % 4)
+                image_bytes = base64.urlsafe_b64decode(
+                    image_token + padding
                 )
+
+                image_data = base64.b64encode(
+                    image_bytes
+                ).decode("ascii")
+
+            else:
+                raise ValueError("Tindakan tidak sah. Sila cuba semula.")
+
+            if not image_data:
+                raise ValueError("Data gambar tidak sah. Sila upload semula.")
 
             preview = f"""
             <div class="result">
@@ -595,8 +585,7 @@ def upload():
 
                 if not api_key:
                     raise ValueError(
-                        "API Key AI belum ditetapkan. "
-                        "Sila semak Environment Variables di Render."
+                        "API Key AI belum ditetapkan di Render."
                     )
 
                 client = OpenAI(api_key=api_key)
@@ -610,25 +599,18 @@ def upload():
                                 {
                                     "type": "input_text",
                                     "text": (
-                                        "Anda ialah pembantu teknisyen "
-                                        "komputer. Analisis gambar ini. "
-                                        "Kenal pasti kerosakan yang "
-                                        "benar-benar kelihatan. Jika "
-                                        "punca tidak dapat dipastikan "
-                                        "melalui gambar, nyatakan "
-                                        "ketidakpastian itu. Berikan "
-                                        "jawapan dalam Bahasa Melayu "
-                                        "dengan bahagian: PEMERHATIAN, "
-                                        "KEMUNGKINAN MASALAH, "
-                                        "CADANGAN PEMERIKSAAN dan "
-                                        "LANGKAH PENYELESAIAN."
+                                        "Anda ialah pembantu teknisyen komputer. "
+                                        "Analisis gambar ini dalam Bahasa Melayu. "
+                                        "Nyatakan PEMERHATIAN, KEMUNGKINAN MASALAH, "
+                                        "CADANGAN PEMERIKSAAN dan LANGKAH PENYELESAIAN. "
+                                        "Jangan mengesahkan kerosakan yang tidak "
+                                        "dapat dipastikan melalui gambar."
                                     )
                                 },
                                 {
                                     "type": "input_image",
                                     "image_url": (
-                                        "data:image/jpeg;base64,"
-                                        + image_data
+                                        "data:image/jpeg;base64," + image_data
                                     )
                                 }
                             ]
@@ -639,15 +621,12 @@ def upload():
                 diagnosis_text = response.output_text.strip()
 
                 if not diagnosis_text:
-                    raise ValueError(
-                        "AI tidak memberikan hasil. Sila cuba lagi."
-                    )
+                    raise ValueError("AI tidak memberikan hasil. Sila cuba lagi.")
 
                 problem = "Analisis gambar: " + filename
                 advice = (
-                    "Ikuti cadangan pemeriksaan dan penyelesaian "
-                    "dalam hasil diagnosis AI. Sahkan punca sebenar "
-                    "dengan pemeriksaan teknikal."
+                    "Ikuti cadangan pemeriksaan dalam hasil diagnosis AI. "
+                    "Sahkan punca sebenar melalui pemeriksaan teknikal."
                 )
 
                 save_report(problem, diagnosis_text, advice)
@@ -665,14 +644,9 @@ def upload():
             else:
                 result = preview + """
                 <form method="post">
-                    <input type="hidden" name="action"
-                           value="analyze">
-                    <input type="hidden" name="filename"
-                           value="""" + escape(filename) + """">
-
-                    <input type="hidden" name="image_data"
-                           value="""" + image_token + """">
-
+                    <input type="hidden" name="action" value="analyze">
+                    <input type="hidden" name="filename" value="""" + escape(filename) + """">
+                    <input type="hidden" name="image_data" value="""" + image_token + """">
                     <button class="button purple" type="submit">
                         ANALISIS MASALAH
                     </button>
@@ -681,18 +655,15 @@ def upload():
 
         except ValueError as e:
             result = (
-                '<div class="result">'
-                + escape(str(e))
-                + '</div>'
+                '<div class="result">' + escape(str(e)) + '</div>'
             )
 
         except Exception:
             app.logger.exception("Ralat semasa analisis gambar")
             result = """
             <div class="result">
-                Analisis gagal. Sila semak API Key, baki kredit
-                API, sambungan Internet atau log ralat Render.
-                Kemudian cuba lagi.
+                Analisis gagal. Sila semak Render Logs untuk mengetahui
+                punca sebenar. Kemudian cuba lagi.
             </div>
             """
 
@@ -700,22 +671,14 @@ def upload():
     <div class="container">
         <h1>UPLOAD GAMBAR</h1>
         <p>Muat naik gambar komputer untuk dianalisis oleh AI.</p>
-
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload">
-
             <label>Pilih gambar komputer:</label>
-            <input type="file" name="image"
-                   accept=".jpg,.jpeg,.png" required>
-
-            <button class="button green" type="submit">
-                UPLOAD GAMBAR
-            </button>
+            <input type="file" name="image" accept=".jpg,.jpeg,.png" required>
+            <button class="button green" type="submit">UPLOAD GAMBAR</button>
         </form>
     """ + result + """
-        <a class="button grey" href="/menu">
-            KEMBALI KE MENU UTAMA
-        </a>
+        <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
     </div>
     """
 
@@ -814,5 +777,7 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
 
 
