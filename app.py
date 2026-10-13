@@ -508,6 +508,32 @@ def upload():
         action = request.form.get("action", "upload")
         filename = request.form.get("filename", "")
         image_data = request.form.get("image_data", "")
+        action = request.form.get("action", "upload")
+        filename = request.form.get("filename", "")
+        image_token = request.form.get("image_data", "")
+        image_data = ""
+
+        if action == "analyze" and image_token:
+            try:
+                padding = "=" * (-len(image_token) % 4)
+                image_bytes = base64.urlsafe_b64decode(
+                    image_token + padding
+                )
+               
+                image_bytes = buffer.getvalue()
+
+                image_data = base64.b64encode(
+                    image_bytes
+                ).decode("ascii")
+
+                image_token = base64.urlsafe_b64encode(
+                    image_bytes
+                ).decode("ascii").rstrip("=")
+
+            except Exception:
+                raise ValueError(
+                    "Data gambar tidak sah. Sila upload semula."
+                )
 
         try:
             if action == "upload":
@@ -643,8 +669,10 @@ def upload():
                            value="analyze">
                     <input type="hidden" name="filename"
                            value="""" + escape(filename) + """">
+
                     <input type="hidden" name="image_data"
-                           value="""" + image_data + """">
+                           value="""" + image_token + """">
+
                     <button class="button purple" type="submit">
                         ANALISIS MASALAH
                     </button>
@@ -786,4 +814,5 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
 
