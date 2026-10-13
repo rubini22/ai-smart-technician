@@ -3,6 +3,7 @@ from openai import OpenAI
 import io
 import re
 import subprocess
+import shutil
 from datetime import datetime
 
 from flask import (
@@ -352,41 +353,99 @@ def diagnosis():
     """
     return page(content)
 
+
 @app.route("/network", methods=["GET", "POST"])
 def network():
     result = ""
+
     if request.method == "POST":
         host = request.form.get("host", "").strip()
 
         if not re.fullmatch(r"[A-Za-z0-9.-]+", host):
-            result = '<div class="result">Masukkan alamat IP atau nama hos yang sah.</div>'
+            result = (
+                '<div class="result">'
+                'Masukkan alamat IP atau nama hos yang sah.'
+                '</div>'
+            )
         else:
-            try:
-                completed = subprocess.run(
-                    ["ping", "-c", "4", "-W", "3", host],
-                    capture_output=True,
-                    text=True,
-                    timeout=20
+            ping_path = shutil.which("ping")
+
+            if ping_path is None:
+                result = (
+                    '<div class="result">'
+                    '<b>UJIAN PING TIDAK TERSEDIA</b><br>'
+                    'Server tidak mempunyai arahan ping. '
+                    'Konfigurasi server Render perlu diperiksa '
+                    'sebelum ujian ping boleh dijalankan.'
+                    '</div>'
                 )
-                output = completed.stdout or completed.stderr or "Tiada output diterima."
-                diagnosis_text = (
-                    "Ping menerima respons daripada hos."
-                    if completed.returncode == 0
-                    else "Ping gagal atau hos tidak memberikan respons."
-                )
-                save_report(
-                    "Ujian ping ke " + host,
-                    diagnosis_text,
-                    "Semak alamat IP, kabel rangkaian, Wi-Fi, gateway dan firewall jika ping gagal."
-                )
-                result = '<div class="result"><b>KEPUTUSAN PING</b><br>' + \
-                    "<br>".join(
-                        line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                        for line in output.splitlines()
-                    ) + '</div>'
-            except Exception as exc:
-                result = '<div class="result">Ujian ping tidak dapat dijalankan: ' + \
-                    str(exc).replace("<", "&lt;").replace(">", "&gt;") + '</div>'
+            else:
+                try:
+                    if os.name == "nt":
+                        command = [
+                            ping_path, "-n", "4", "-w", "3000", host
+                        ]
+                    else:
+                        command = [
+                            ping_path, "-c", "4", "-W", "3", host
+                        ]
+
+                    completed = subprocess.run(
+                        command,
+                        capture_output=True,
+                        text=True,
+                        timeout=20
+                    )
+
+                    output = (
+                        completed.stdout
+                        or completed.stderr
+                        or "Tiada output diterima."
+                    )
+
+                    diagnosis_text = (
+                        "Ping menerima respons daripada hos."
+                        if completed.returncode == 0
+                        else "Ping gagal atau hos tidak memberikan respons."
+                    )
+
+                    save_report(
+                        "Ujian ping ke " + host,
+                        diagnosis_text,
+                        "Semak alamat IP, kabel rangkaian, Wi-Fi, "
+                        "gateway dan firewall jika ping gagal."
+                    )
+
+                    safe_output = (
+                        output.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                    )
+
+                    result = (
+                        '<div class="result">'
+                        '<b>KEPUTUSAN PING</b><br>'
+                        + safe_output.replace("\n", "<br>")
+                        + '</div>'
+                    )
+
+                except subprocess.TimeoutExpired:
+                    result = (
+                        '<div class="result">'
+                        'Ujian ping mengambil masa terlalu lama. '
+                        'Sila cuba lagi.'
+                        '</div>'
+                    )
+
+                except OSError as exc:
+                    result = (
+                        '<div class="result">'
+                        'Ujian ping gagal dijalankan: '
+                        + str(exc).replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        + '</div>'
+                    )
 
     content = """
     <div class="container">
@@ -394,88 +453,19 @@ def network():
       <p>Masukkan alamat IP atau nama hos untuk menjalankan ujian ping.</p>
       <form method="post">
         <label>Alamat IP / Nama Hos:</label>
-        <input type="text" name="host" required placeholder="Contoh: 8.8.8.8">
-        <button class="button lightblue" type="submit">MULA UJIAN PING</button>
+        <input type="text" name="host" required
+               placeholder="Contoh: 8.8.8.8">
+        <button class="button lightblue" type="submit">
+          MULA UJIAN PING
+        </button>
       </form>
       """ + result + """
-      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+      <a class="button grey" href="/menu">
+        KEMBALI KE MENU UTAMA
+      </a>
     </div>
     """
-    return page(content)
 
-@app.route("/upload", methods=["GET", "POST"])
-def upload():
-    result = ""
-    preview = ""
-
-    if request.method == "POST":
-        file = request.files.get("image")
-
-        if not file or not file.filename:
-            result = '<div class="result">Sila pilih gambar terlebih dahulu.</div>'
-        else:
-            filename = secure_filename(file.filename)
-            extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-            if extension not in ALLOWED_EXTENSIONS:
-                result = '<div class="result">Format gambar yang dibenarkan ialah JPG, JPEG dan PNG.</div>'
-            else:
-                try:
-                    image_bytes = file.read()
-                    img = Image.open(io.BytesIO(image_bytes))
-                    img.verify()
-
-                    encoded = __import__("base64").b64encode(image_bytes).decode("ascii")
-                    mime = "image/png" if extension == "png" else "image/jpeg"
-                    preview = f'<img class="preview" src="data:{mime};base64,{encoded}" alt="Gambar yang dimuat naik">'
-
-                    name = filename.lower()
-                    if any(word in name for word in ["habuk", "dust", "panas", "overheat"]):
-                        problem = "Gambar berkaitan habuk atau suhu komputer."
-                        diag = "Kemungkinan pengumpulan habuk atau masalah pengudaraan."
-                        advice = "Periksa kipas dan pengudaraan. Matikan komputer sebelum membersihkan habuk."
-                    elif any(word in name for word in ["monitor", "display", "paparan", "screen"]):
-                        problem = "Gambar berkaitan monitor atau paparan."
-                        diag = "Kemungkinan masalah paparan atau sambungan monitor."
-                        advice = "Periksa kabel paparan, sambungan monitor dan bekalan kuasa."
-                    elif "ram" in name:
-                        problem = "Gambar berkaitan RAM."
-                        diag = "Kemungkinan masalah pemasangan atau memori RAM."
-                        advice = "Minta juruteknik memeriksa RAM dengan komputer dimatikan."
-                    elif any(word in name for word in ["wifi", "network", "lan", "kabel"]):
-                        problem = "Gambar berkaitan rangkaian komputer."
-                        diag = "Kemungkinan masalah sambungan rangkaian."
-                        advice = "Periksa kabel LAN, Wi-Fi, router dan adapter rangkaian."
-                    else:
-                        problem = "Gambar komputer dimuat naik: " + filename
-                        diag = "Gambar berjaya dimuat naik, tetapi masalah khusus tidak dapat disahkan melalui nama fail sahaja."
-                        advice = "Periksa gambar dan masukkan simptom komputer dalam fungsi Diagnosis Komputer untuk analisis berdasarkan maklumat."
-
-                    save_report(problem, diag, advice)
-                    result = f"""
-                    <div class="result">
-                    <b>ANALISIS GAMBAR</b><br>
-                    <b>Masalah:</b> {problem}<br>
-                    <b>Diagnosis:</b> {diag}<br>
-                    <b>Cadangan:</b> {advice}
-                    </div>
-                    """
-                except Exception:
-                    result = '<div class="result">Fail tersebut bukan gambar yang sah atau tidak dapat dibaca.</div>'
-
-    content = """
-    <div class="container">
-      <h1>UPLOAD GAMBAR</h1>
-      <p>Muat naik gambar komputer atau komponen yang ingin diperiksa.</p>
-      <form method="post" enctype="multipart/form-data">
-        <label>Pilih gambar (JPG, JPEG atau PNG):</label>
-        <input type="file" name="image" accept=".jpg,.jpeg,.png" required>
-        <button class="button green" type="submit">ANALISIS MASALAH</button>
-      </form>
-      """ + preview + result + """
-      <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
-    </div>
-    """
     return page(content)
 
 def create_pdf(info):
@@ -612,3 +602,6 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
+     
