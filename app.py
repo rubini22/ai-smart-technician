@@ -632,66 +632,34 @@ def upload():
             """
 
             if action == "analyze":
-                api_key = os.environ.get("OPENAI_API_KEY")
+                # Analisis setempat tanpa OpenAI API.
+                symptom = request.form.get("symptom", "").strip()
 
-                if not api_key:
-                    raise ValueError(
-                        "API Key AI belum ditetapkan di Render."
+                if symptom:
+                    diagnosis_text, advice = diagnosis_computer(symptom)
+                    problem = "Analisis gambar: " + filename + "\\nSimptom: " + symptom
+                else:
+                    diagnosis_text = (
+                        "Gambar berjaya diterima, tetapi sistem tanpa AI tidak "
+                        "dapat mengenal pasti kerosakan secara automatik daripada "
+                        "kandungan gambar sahaja."
                     )
-
-                client = OpenAI(api_key=api_key)
-
-                response = client.responses.create(
-                    model="gpt-4o-mini",
-                    input=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "input_text",
-                                    "text": (
-                                        "Anda ialah pembantu teknisyen komputer. "
-                                        "Analisis gambar ini dalam Bahasa Melayu. "
-                                        "Nyatakan PEMERHATIAN, KEMUNGKINAN MASALAH, "
-                                        "CADANGAN PEMERIKSAAN dan LANGKAH "
-                                        "PENYELESAIAN. Jangan mengesahkan "
-                                        "kerosakan yang tidak dapat dipastikan "
-                                        "melalui gambar."
-                                    )
-                                },
-                                {
-                                    "type": "input_image",
-                                    "image_url": (
-                                        "data:image/jpeg;base64,"
-                                        + image_data
-                                    )
-                                }
-                            ]
-                        }
-                    ]
-                )
-
-                diagnosis_text = response.output_text.strip()
-
-                if not diagnosis_text:
-                    raise ValueError(
-                        "AI tidak memberikan hasil. Sila cuba lagi."
+                    advice = (
+                        "1. Perhatikan bahagian komputer yang ditunjukkan dalam gambar.\\n"
+                        "2. Masukkan simptom yang berlaku supaya sistem boleh memberi diagnosis.\\n"
+                        "3. Catat sebarang lampu amaran atau mesej ralat.\\n"
+                        "4. Jangan mengesahkan komponen rosak berdasarkan gambar sahaja."
                     )
-
-                problem = "Analisis gambar: " + filename
-                advice = (
-                    "Ikuti cadangan pemeriksaan dalam hasil diagnosis AI. "
-                    "Sahkan punca sebenar melalui pemeriksaan teknikal."
-                )
+                    problem = "Analisis gambar: " + filename
 
                 save_report(problem, diagnosis_text, advice)
 
                 result = preview + """
                 <div class="result">
-                    <b>HASIL ANALISIS AI</b>
-                    <p>""" + escape(diagnosis_text).replace(
-                        "\n", "<br>"
-                    ) + """</p>
+                    <b>HASIL ANALISIS</b>
+                    <p>""" + escape(diagnosis_text).replace("\\n", "<br>") + """</p>
+                    <b>CADANGAN PEMERIKSAAN</b>
+                    <p>""" + escape(advice).replace("\\n", "<br>") + """</p>
                 </div>
                 <p>Laporan diagnosis telah disimpan ke sesi sistem.</p>
                 """
@@ -702,6 +670,8 @@ def upload():
                     <input type="hidden" name="action" value="analyze">
                     <input type="hidden" name="filename" value=\"""" + escape(filename) + """\">
                     <input type="hidden" name="image_data" value=\"""" + image_token + """\">
+                    <label>Nyatakan simptom (pilihan):</label>
+                    <textarea name="symptom" placeholder="Contoh: komputer tidak boleh hidup, skrin gelap, komputer lambat atau terlalu panas"></textarea>
                     <button class="button purple" type="submit">
                         ANALISIS MASALAH
                     </button>
@@ -839,4 +809,5 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
 
