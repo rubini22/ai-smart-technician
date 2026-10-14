@@ -1,5 +1,4 @@
 import os
-from openai import OpenAI
 import io
 import re
 import subprocess
@@ -599,7 +598,7 @@ def upload():
                 if img.format not in ("JPEG", "PNG"):
                     raise ValueError("Format gambar tidak sah.")
 
-                # Tukarkan semula kepada JPEG untuk analisis AI.
+                # Tukarkan semula kepada JPEG untuk dipaparkan dan dianalisis setempat.
                 img.thumbnail((1200, 1200))
                 img = img.convert("RGB")
 
@@ -685,19 +684,19 @@ def upload():
                 + '</div>'
             )
 
-        except Exception:
+        except Exception as e:
             app.logger.exception("Ralat semasa analisis gambar")
-            result = """
-            <div class="result">
-                Analisis gagal. Sila semak Render Logs untuk mengetahui
-                punca sebenar. Kemudian cuba lagi.
-            </div>
-            """
+            result = (
+                '<div class="result"><b>Analisis gagal.</b><br>'
+                'Jenis ralat: ' + escape(type(e).__name__) + '<br>'
+                'Butiran: ' + escape(str(e) or "Tiada butiran ralat") +
+                '<br>Sila cuba gambar JPG/PNG yang lebih kecil.</div>'
+            )
 
     content = """
     <div class="container">
         <h1>UPLOAD GAMBAR</h1>
-        <p>Muat naik gambar komputer untuk dianalisis oleh AI.</p>
+        <p>Muat naik gambar komputer dan masukkan simptom untuk mendapatkan cadangan diagnosis.</p>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload">
             <label>Pilih gambar komputer:</label>
@@ -809,5 +808,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
-
 
