@@ -1,4 +1,5 @@
 import os
+from openai import OpenAI
 import io
 import re
 import subprocess
@@ -598,7 +599,7 @@ def upload():
                 if img.format not in ("JPEG", "PNG"):
                     raise ValueError("Format gambar tidak sah.")
 
-                # Tukarkan semula kepada JPEG untuk dipaparkan dan dianalisis setempat.
+                # Tukarkan semula kepada JPEG untuk analisis AI.
                 img.thumbnail((1200, 1200))
                 img = img.convert("RGB")
 
@@ -631,34 +632,66 @@ def upload():
             """
 
             if action == "analyze":
-                # Analisis setempat tanpa OpenAI API.
-                symptom = request.form.get("symptom", "").strip()
+                api_key = os.environ.get("OPENAI_API_KEY")
 
-                if symptom:
-                    diagnosis_text, advice = diagnosis_computer(symptom)
-                    problem = "Analisis gambar: " + filename + "\\nSimptom: " + symptom
-                else:
-                    diagnosis_text = (
-                        "Gambar berjaya diterima, tetapi sistem tanpa AI tidak "
-                        "dapat mengenal pasti kerosakan secara automatik daripada "
-                        "kandungan gambar sahaja."
+                if not api_key:
+                    raise ValueError(
+                        "API Key AI belum ditetapkan di Render."
                     )
-                    advice = (
-                        "1. Perhatikan bahagian komputer yang ditunjukkan dalam gambar.\\n"
-                        "2. Masukkan simptom yang berlaku supaya sistem boleh memberi diagnosis.\\n"
-                        "3. Catat sebarang lampu amaran atau mesej ralat.\\n"
-                        "4. Jangan mengesahkan komponen rosak berdasarkan gambar sahaja."
+
+                client = OpenAI(api_key=api_key)
+
+                response = client.responses.create(
+                    model="gpt-4o-mini",
+                    input=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "input_text",
+                                    "text": (
+                                        "Anda ialah pembantu teknisyen komputer. "
+                                        "Analisis gambar ini dalam Bahasa Melayu. "
+                                        "Nyatakan PEMERHATIAN, KEMUNGKINAN MASALAH, "
+                                        "CADANGAN PEMERIKSAAN dan LANGKAH "
+                                        "PENYELESAIAN. Jangan mengesahkan "
+                                        "kerosakan yang tidak dapat dipastikan "
+                                        "melalui gambar."
+                                    )
+                                },
+                                {
+                                    "type": "input_image",
+                                    "image_url": (
+                                        "data:image/jpeg;base64,"
+                                        + image_data
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                )
+
+                diagnosis_text = response.output_text.strip()
+
+                if not diagnosis_text:
+                    raise ValueError(
+                        "AI tidak memberikan hasil. Sila cuba lagi."
                     )
-                    problem = "Analisis gambar: " + filename
+
+                problem = "Analisis gambar: " + filename
+                advice = (
+                    "Ikuti cadangan pemeriksaan dalam hasil diagnosis AI. "
+                    "Sahkan punca sebenar melalui pemeriksaan teknikal."
+                )
 
                 save_report(problem, diagnosis_text, advice)
 
                 result = preview + """
                 <div class="result">
-                    <b>HASIL ANALISIS</b>
-                    <p>""" + escape(diagnosis_text).replace("\\n", "<br>") + """</p>
-                    <b>CADANGAN PEMERIKSAAN</b>
-                    <p>""" + escape(advice).replace("\\n", "<br>") + """</p>
+                    <b>HASIL ANALISIS AI</b>
+                    <p>""" + escape(diagnosis_text).replace(
+                        "\n", "<br>"
+                    ) + """</p>
                 </div>
                 <p>Laporan diagnosis telah disimpan ke sesi sistem.</p>
                 """
@@ -669,8 +702,6 @@ def upload():
                     <input type="hidden" name="action" value="analyze">
                     <input type="hidden" name="filename" value=\"""" + escape(filename) + """\">
                     <input type="hidden" name="image_data" value=\"""" + image_token + """\">
-                    <label>Nyatakan simptom (pilihan):</label>
-                    <textarea name="symptom" placeholder="Contoh: komputer tidak boleh hidup, skrin gelap, komputer lambat atau terlalu panas"></textarea>
                     <button class="button purple" type="submit">
                         ANALISIS MASALAH
                     </button>
@@ -684,19 +715,19 @@ def upload():
                 + '</div>'
             )
 
-        except Exception as e:
+        except Exception:
             app.logger.exception("Ralat semasa analisis gambar")
-            result = (
-                '<div class="result"><b>Analisis gagal.</b><br>'
-                'Jenis ralat: ' + escape(type(e).__name__) + '<br>'
-                'Butiran: ' + escape(str(e) or "Tiada butiran ralat") +
-                '<br>Sila cuba gambar JPG/PNG yang lebih kecil.</div>'
-            )
+            result = """
+            <div class="result">
+                Analisis gagal. Sila semak Render Logs untuk mengetahui
+                punca sebenar. Kemudian cuba lagi.
+            </div>
+            """
 
     content = """
     <div class="container">
         <h1>UPLOAD GAMBAR</h1>
-        <p>Muat naik gambar komputer dan masukkan simptom untuk mendapatkan cadangan diagnosis.</p>
+        <p>Muat naik gambar komputer untuk dianalisis oleh AI.</p>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload">
             <label>Pilih gambar komputer:</label>
@@ -808,4 +839,6 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
 
