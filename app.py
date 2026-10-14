@@ -311,7 +311,6 @@ def menu():
 
       <a class="button blue" href="/diagnosis">DIAGNOSIS KOMPUTER</a>
       <a class="button lightblue" href="/network">DIAGNOSIS NETWORK</a>
-      <a class="button green" href="/upload">UPLOAD GAMBAR</a>
       <a class="button purple" href="/report">TECHNICIAN REPORT</a>
       <a class="button red" href="/keluar">KELUAR</a>
       <a class="button grey" href="/">KEMBALI KE HALAMAN UTAMA</a>
@@ -592,5 +591,7 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
+
 
 
