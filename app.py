@@ -501,6 +501,7 @@ def network():
 
 
 
+
 @app.route("/upload", methods=["GET", "POST"])
 def upload():
     result = ""
@@ -509,21 +510,33 @@ def upload():
         action = request.form.get("action", "upload")
         filename = request.form.get("filename", "")
         image_data = ""
+        image_token = ""
 
         try:
             if action == "upload":
                 file = request.files.get("image")
 
                 if not file or not file.filename:
-                    raise ValueError("Sila pilih gambar terlebih dahulu.")
+                    raise ValueError(
+                        "Sila pilih gambar terlebih dahulu."
+                    )
 
                 filename = secure_filename(file.filename)
+
+                if "." not in filename:
+                    raise ValueError("Nama fail gambar tidak sah.")
+
                 extension = filename.rsplit(".", 1)[-1].lower()
 
                 if extension not in ALLOWED_EXTENSIONS:
-                    raise ValueError("Gunakan gambar JPG, JPEG atau PNG sahaja.")
+                    raise ValueError(
+                        "Gunakan gambar JPG, JPEG atau PNG sahaja."
+                    )
 
                 raw = file.read()
+
+                if not raw:
+                    raise ValueError("Fail gambar kosong.")
 
                 img = Image.open(io.BytesIO(raw))
                 img.verify()
@@ -545,45 +558,72 @@ def upload():
                     image_bytes
                 ).decode("ascii")
 
-                image_token = base64.urlsafe_b64encode(
-                    image_bytes
-                ).decode("ascii").rstrip("=")
+               image_token = base64.urlsafe_b64encode(
+                   image_bytes
+               ).decode("ascii")
 
-         
             elif action == "analyze":
-                image_token = request.form.get("image_data", "").strip()
+                image_token = request.form.get(
+                    "image_data", ""
+                ).strip()
+
+                filename = secure_filename(
+                    request.form.get("filename", "gambar.jpg")
+                )
 
                 if not image_token:
                     raise ValueError(
                         "Data gambar tiada. Sila upload semula."
                     )
 
-                try:
-                    image_bytes = base64.b64decode(
-                        image_token,
-                        validate=True
-                    )
-                except Exception:
-                    raise ValueError(
-                        "Data gambar tidak sah atau tidak lengkap. "
-                        "Sila upload semula gambar."
-                    )
+              try:
+                padding = "=" * (-len(image_token) % 4)
+
+               image_bytes = base64.urlsafe_b64decode(
+                    image_token + padding
+                )
+            except Exception:
+                 raise ValueError(
+                      "Data gambar tidak sah atau tidak lengkap. "
+                      "Sila upload semula gambar."
+                  )
 
                 if not image_bytes:
                     raise ValueError(
                         "Data gambar kosong. Sila upload semula."
                     )
 
+                # Pastikan data yang diterima benar-benar gambar.
+                img = Image.open(io.BytesIO(image_bytes))
+                img.verify()
+
+                img = Image.open(io.BytesIO(image_bytes))
+                img.load()
+
+                if img.format not in ("JPEG", "PNG"):
+                    raise ValueError("Format gambar tidak sah.")
+
+                # Tukarkan semula kepada JPEG untuk analisis AI.
+                img.thumbnail((1200, 1200))
+                img = img.convert("RGB")
+
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=75)
+                image_bytes = buffer.getvalue()
+
                 image_data = base64.b64encode(
                     image_bytes
                 ).decode("ascii")
 
-
             else:
-                raise ValueError("Tindakan tidak sah. Sila cuba semula.")
+                raise ValueError(
+                    "Tindakan tidak sah. Sila cuba semula."
+                )
 
             if not image_data:
-                raise ValueError("Data gambar tidak sah. Sila upload semula.")
+                raise ValueError(
+                    "Data gambar tidak sah. Sila upload semula."
+                )
 
             preview = f"""
             <div class="result">
@@ -617,15 +657,17 @@ def upload():
                                         "Anda ialah pembantu teknisyen komputer. "
                                         "Analisis gambar ini dalam Bahasa Melayu. "
                                         "Nyatakan PEMERHATIAN, KEMUNGKINAN MASALAH, "
-                                        "CADANGAN PEMERIKSAAN dan LANGKAH PENYELESAIAN. "
-                                        "Jangan mengesahkan kerosakan yang tidak "
-                                        "dapat dipastikan melalui gambar."
+                                        "CADANGAN PEMERIKSAAN dan LANGKAH "
+                                        "PENYELESAIAN. Jangan mengesahkan "
+                                        "kerosakan yang tidak dapat dipastikan "
+                                        "melalui gambar."
                                     )
                                 },
                                 {
                                     "type": "input_image",
                                     "image_url": (
-                                        "data:image/jpeg;base64," + image_data
+                                        "data:image/jpeg;base64,"
+                                        + image_data
                                     )
                                 }
                             ]
@@ -636,7 +678,9 @@ def upload():
                 diagnosis_text = response.output_text.strip()
 
                 if not diagnosis_text:
-                    raise ValueError("AI tidak memberikan hasil. Sila cuba lagi.")
+                    raise ValueError(
+                        "AI tidak memberikan hasil. Sila cuba lagi."
+                    )
 
                 problem = "Analisis gambar: " + filename
                 advice = (
@@ -660,8 +704,8 @@ def upload():
                 result = preview + """
                 <form method="post">
                     <input type="hidden" name="action" value="analyze">
-                    <input type="hidden" name="filename" value="""" + escape(filename) + """">
-                    <input type="hidden" name="image_data" value="""" + image_token + """">
+                    <input type="hidden" name="filename" value=\"""" + escape(filename) + """\">
+                    <input type="hidden" name="image_data" value=\"""" + image_token + """\">
                     <button class="button purple" type="submit">
                         ANALISIS MASALAH
                     </button>
@@ -670,7 +714,9 @@ def upload():
 
         except ValueError as e:
             result = (
-                '<div class="result">' + escape(str(e)) + '</div>'
+                '<div class="result">'
+                + escape(str(e))
+                + '</div>'
             )
 
         except Exception:
@@ -689,11 +735,16 @@ def upload():
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload">
             <label>Pilih gambar komputer:</label>
-            <input type="file" name="image" accept=".jpg,.jpeg,.png" required>
-            <button class="button green" type="submit">UPLOAD GAMBAR</button>
+            <input type="file" name="image"
+                   accept=".jpg,.jpeg,.png" required>
+            <button class="button green" type="submit">
+                UPLOAD GAMBAR
+            </button>
         </form>
     """ + result + """
-        <a class="button grey" href="/menu">KEMBALI KE MENU UTAMA</a>
+        <a class="button grey" href="/menu">
+            KEMBALI KE MENU UTAMA
+        </a>
     </div>
     """
 
