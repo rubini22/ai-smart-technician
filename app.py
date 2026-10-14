@@ -558,9 +558,9 @@ def upload():
                     image_bytes
                 ).decode("ascii")
 
-               image_token = base64.urlsafe_b64encode(
-                   image_bytes
-               ).decode("ascii")
+                image_token = base64.urlsafe_b64encode(
+                    image_bytes
+                ).decode("ascii")
 
             elif action == "analyze":
                 image_token = request.form.get(
@@ -576,21 +576,17 @@ def upload():
                         "Data gambar tiada. Sila upload semula."
                     )
 
-              try:
-                padding = "=" * (-len(image_token) % 4)
 
-               image_bytes = base64.urlsafe_b64decode(
-                    image_token + padding
-                )
-            except Exception:
-                 raise ValueError(
-                      "Data gambar tidak sah atau tidak lengkap. "
-                      "Sila upload semula gambar."
-                  )
+                try:
+                    padding = "=" * (-len(image_token) % 4)
 
-                if not image_bytes:
+                    image_bytes = base64.urlsafe_b64decode(
+                        image_token + padding
+                    )
+                except Exception:
                     raise ValueError(
-                        "Data gambar kosong. Sila upload semula."
+                        "Data gambar tidak sah atau tidak lengkap. "
+                        "Sila upload semula gambar."
                     )
 
                 # Pastikan data yang diterima benar-benar gambar.
@@ -843,3 +839,4 @@ if __name__ == "__main__":
         port=int(os.environ.get("PORT", 5000)),
         debug=False
     )
+
